@@ -25,7 +25,7 @@ enum CaptureMode: String, CaseIterable, Identifiable {
         case .window:
             "특정 앱 창만 캡처합니다."
         case .area:
-            "cmd+shift+5와 비슷한 영역 선택 UI를 다음 단계에서 붙입니다."
+            "cmd+shift+5처럼 드래그로 영역을 선택해 녹화합니다."
         }
     }
 }

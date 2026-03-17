@@ -4,10 +4,13 @@ import ScreenCaptureKit
 enum ResolvedCaptureSource {
     case display(SCDisplay, sourceLabel: String)
     case window(SCWindow, sourceLabel: String)
+    case area(SCDisplay, sourceRect: CGRect, sourceLabel: String)
 
     var sourceLabel: String {
         switch self {
-        case let .display(_, sourceLabel), let .window(_, sourceLabel):
+        case let .display(_, sourceLabel),
+             let .window(_, sourceLabel),
+             let .area(_, _, sourceLabel):
             sourceLabel
         }
     }
@@ -18,6 +21,17 @@ enum ResolvedCaptureSource {
             return SCContentFilter(display: display, excludingWindows: [])
         case let .window(window, _):
             return SCContentFilter(desktopIndependentWindow: window)
+        case let .area(display, _, _):
+            return SCContentFilter(display: display, excludingWindows: [])
+        }
+    }
+
+    var sourceRect: CGRect? {
+        switch self {
+        case .display, .window:
+            nil
+        case let .area(_, sourceRect, _):
+            sourceRect
         }
     }
 }
@@ -97,5 +111,22 @@ final class ScreenCaptureSourceCatalog {
         case .area:
             return nil
         }
+    }
+
+    func resolveAreaSelection(_ areaSelection: AreaSelection) async throws -> ResolvedCaptureSource? {
+        if displaySourcesByID.isEmpty {
+            _ = try await loadSnapshot()
+        }
+
+        let displayID = areaSelection.displayID
+        guard let display = displaySourcesByID["display-\(displayID)"] else {
+            return nil
+        }
+
+        return .area(
+            display,
+            sourceRect: areaSelection.normalizedRect,
+            sourceLabel: areaSelection.sourceLabel
+        )
     }
 }

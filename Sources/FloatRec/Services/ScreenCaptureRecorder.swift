@@ -15,7 +15,7 @@ final class ScreenCaptureRecorder: NSObject {
     func start(source: ResolvedCaptureSource) async throws {
         let filter = source.makeFilter()
         let configuration = SCStreamConfiguration()
-        let captureSize = bestCaptureSize(for: filter)
+        let captureSize = bestCaptureSize(for: source, filter: filter)
 
         configuration.width = Int(captureSize.width)
         configuration.height = Int(captureSize.height)
@@ -24,6 +24,9 @@ final class ScreenCaptureRecorder: NSObject {
         configuration.queueDepth = 6
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showMouseClicks = true
+        if let sourceRect = source.sourceRect {
+            configuration.sourceRect = sourceRect
+        }
 
         let outputURL = try makeOutputURL()
         let recordingConfiguration = SCRecordingOutputConfiguration()
@@ -88,9 +91,10 @@ final class ScreenCaptureRecorder: NSObject {
         )
     }
 
-    private func bestCaptureSize(for filter: SCContentFilter) -> CGSize {
-        let width = max(filter.contentRect.width * CGFloat(filter.pointPixelScale), 1280)
-        let height = max(filter.contentRect.height * CGFloat(filter.pointPixelScale), 720)
+    private func bestCaptureSize(for source: ResolvedCaptureSource, filter: SCContentFilter) -> CGSize {
+        let referenceRect = source.sourceRect ?? filter.contentRect
+        let width = max(referenceRect.width * CGFloat(filter.pointPixelScale), 320)
+        let height = max(referenceRect.height * CGFloat(filter.pointPixelScale), 240)
         return CGSize(width: width.rounded(.up), height: height.rounded(.up))
     }
 

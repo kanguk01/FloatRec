@@ -39,12 +39,17 @@ struct MenuBarContentView: View {
                     .foregroundStyle(.secondary)
 
                 if appModel.captureMode == .area {
-                    Text("영역 선택 오버레이는 실녹화 엔진을 붙일 때 함께 연결합니다.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(appModel.captureSelectionSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("녹화 시작 후 전체 화면에 오버레이가 뜨고, 드래그를 마치면 바로 녹화가 시작됩니다.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 } else if appModel.currentSourceOptions.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("캡처 소스를 아직 불러오지 못했습니다.")

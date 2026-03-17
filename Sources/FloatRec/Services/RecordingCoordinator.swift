@@ -17,21 +17,31 @@ final class RecordingCoordinator {
     func startRecording(
         mode: CaptureMode,
         selectedSourceID: String?,
+        areaSelection: AreaSelection?,
         fallbackSourceLabel: String
     ) async throws {
-        if #available(macOS 15.0, *),
-           let resolvedSource = try await sourceCatalog.resolveSource(
-               mode: mode,
-               selectedSourceID: selectedSourceID
-           ) {
-            let recorder = ScreenCaptureRecorder()
-            do {
-                try await recorder.start(source: resolvedSource)
-                liveRecorder = recorder
-                return
-            } catch {
-                liveRecorder = nil
-                throw error
+        if #available(macOS 15.0, *) {
+            let resolvedSource: ResolvedCaptureSource?
+
+            if let areaSelection {
+                resolvedSource = try await sourceCatalog.resolveAreaSelection(areaSelection)
+            } else {
+                resolvedSource = try await sourceCatalog.resolveSource(
+                    mode: mode,
+                    selectedSourceID: selectedSourceID
+                )
+            }
+
+            if let resolvedSource {
+                let recorder = ScreenCaptureRecorder()
+                do {
+                    try await recorder.start(source: resolvedSource)
+                    liveRecorder = recorder
+                    return
+                } catch {
+                    liveRecorder = nil
+                    throw error
+                }
             }
         }
 
