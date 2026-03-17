@@ -11,11 +11,5 @@ struct FloatRecApp: App {
                 .environmentObject(appModel)
         }
         .menuBarExtraStyle(.window)
-
-        Settings {
-            SettingsView()
-                .environmentObject(appModel)
-                .frame(width: 360, height: 320)
-        }
     }
 }

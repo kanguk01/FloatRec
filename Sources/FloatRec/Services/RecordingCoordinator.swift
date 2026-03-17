@@ -85,7 +85,7 @@ final class RecordingCoordinator {
             }
 
             do {
-                return try await autoZoomProcessor.process(
+                return try await processWithTimeout(
                     liveArtifact,
                     isAutoZoomEnabled: isAutoZoomEnabled,
                     isClickHighlightEnabled: isClickHighlightEnabled
@@ -96,5 +96,29 @@ final class RecordingCoordinator {
         }
 
         return try await demoRecordingService.stopRecording()
+    }
+
+    private func processWithTimeout(
+        _ artifact: RecordingArtifact,
+        isAutoZoomEnabled: Bool,
+        isClickHighlightEnabled: Bool
+    ) async throws -> RecordingArtifact {
+        try await withThrowingTaskGroup(of: RecordingArtifact.self) { group in
+            group.addTask {
+                try await self.autoZoomProcessor.process(
+                    artifact,
+                    isAutoZoomEnabled: isAutoZoomEnabled,
+                    isClickHighlightEnabled: isClickHighlightEnabled
+                )
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(8))
+                return artifact
+            }
+
+            let result = try await group.next() ?? artifact
+            group.cancelAll()
+            return result
+        }
     }
 }

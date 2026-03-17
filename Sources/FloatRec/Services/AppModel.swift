@@ -28,6 +28,7 @@ final class AppModel: ObservableObject {
     private let areaSelectionOverlayController = AreaSelectionOverlayController()
     private lazy var shelfController = ShelfWindowController()
     private lazy var previewWindowController = ClipPreviewWindowController()
+    private lazy var settingsWindowController = SettingsWindowController()
     private lazy var hotKeyManager: GlobalHotKeyManager = {
         let manager = GlobalHotKeyManager()
         manager.onActivate = { [weak self] in
@@ -276,6 +277,10 @@ final class AppModel: ObservableObject {
 
     func openScreenRecordingSettings() {
         permissionService.openSettings()
+    }
+
+    func openSettingsWindow() {
+        settingsWindowController.show(using: self)
     }
 
     func clearError() {

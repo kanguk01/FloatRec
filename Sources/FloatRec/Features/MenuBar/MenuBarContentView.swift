@@ -189,8 +189,8 @@ struct MenuBarContentView: View {
                 }
                 .disabled(appModel.clips.isEmpty)
 
-                SettingsLink {
-                    Text("설정")
+                Button("설정") {
+                    appModel.openSettingsWindow()
                 }
 
                 Spacer()

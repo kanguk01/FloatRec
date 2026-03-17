@@ -73,8 +73,14 @@ final class ScreenCaptureRecorder: NSObject {
         }
 
         do {
+            do {
+                try stream.removeRecordingOutput(recordingOutput)
+            } catch {
+                // Fallback to stopCapture path if the recording output is already detached.
+            }
+
             try await stream.stopCapture()
-            try await finishTask.value
+            try await waitForRecordingFinish(finishTask)
         } catch {
             recordingDidFinishContinuation = nil
             throw error
@@ -90,6 +96,31 @@ final class ScreenCaptureRecorder: NSObject {
             sourceLabel: sourceLabel ?? "실녹화",
             cursorTrack: nil
         )
+    }
+
+    private func waitForRecordingFinish(_ finishTask: Task<Void, Error>) async throws {
+        let timeoutTask = Task<Void, Error> {
+            try await Task.sleep(for: .seconds(5))
+            throw RecordingServiceError.writerSetupFailed
+        }
+
+        defer {
+            finishTask.cancel()
+            timeoutTask.cancel()
+        }
+
+        do {
+            _ = try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask { try await finishTask.value }
+                group.addTask { try await timeoutTask.value }
+                let value: Void? = try await group.next()
+                group.cancelAll()
+                return value
+            }
+        } catch {
+            // If the finish callback is missing, proceed with the file that was already written
+            // instead of leaving the app stuck in the processing state forever.
+        }
     }
 
     private func bestCaptureSize(for source: ResolvedCaptureSource, filter: SCContentFilter) -> CGSize {
