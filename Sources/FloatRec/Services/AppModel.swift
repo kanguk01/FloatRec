@@ -1,8 +1,10 @@
 import AppKit
 import Foundation
+import OSLog
 
 @MainActor
 final class AppModel: ObservableObject {
+    private let logger = Logger(subsystem: "dev.floatrec.app", category: "app-model")
     @Published private(set) var recordingState: RecordingState = .idle
     @Published private(set) var clips: [RecordingClip] = []
     @Published private var clipThumbnails: [URL: NSImage] = [:]
@@ -111,17 +113,22 @@ final class AppModel: ObservableObject {
 
     func refreshCaptureSourcesIfNeeded() async {
         guard !permissionService.canAccess() else {
+            logger.info("initial source refresh starting with granted permission")
             await refreshCaptureSources(force: false)
             return
         }
+
+        logger.info("initial source refresh skipped because preflight access is false")
     }
 
     func refreshCaptureSources(force: Bool) async {
         guard !isRefreshingSources else {
+            logger.info("source refresh skipped because refresh is already running")
             return
         }
 
         if !permissionService.canAccess() {
+            logger.info("source refresh blocked by missing screen recording permission force=\(force, privacy: .public)")
             if force {
                 lastErrorMessage = permissionService.noAccessSourceRefreshMessage()
             }
@@ -135,8 +142,12 @@ final class AppModel: ObservableObject {
             let snapshot = try await sourceCatalog.loadSnapshot()
             displaySources = snapshot.displays
             windowSources = snapshot.windows
+            logger.info(
+                "source refresh succeeded: displays=\(snapshot.displays.count, privacy: .public) windows=\(snapshot.windows.count, privacy: .public)"
+            )
             syncSelectedSource()
         } catch {
+            logger.error("source refresh failed: \(error.localizedDescription, privacy: .public)")
             lastErrorMessage = "캡처 소스 목록을 불러오지 못했습니다: \(error.localizedDescription)"
         }
     }
@@ -148,10 +159,12 @@ final class AppModel: ObservableObject {
 
         lastErrorMessage = nil
         recordingState = .requestingPermission
+        logger.info("recording start requested for mode=\(self.captureMode.title, privacy: .public)")
 
         let granted = await permissionService.ensureAccess()
         guard granted else {
             recordingState = .idle
+            logger.error("recording start blocked because permission request was denied")
             lastErrorMessage = permissionService.deniedAccessMessage()
             return
         }
@@ -162,6 +175,7 @@ final class AppModel: ObservableObject {
 
         guard captureMode == .area || selectedSourceOption != nil else {
             recordingState = .idle
+            logger.error("recording start blocked because no source option is available")
             lastErrorMessage = "선택한 캡처 모드에 사용할 대상이 없습니다."
             return
         }
@@ -193,8 +207,10 @@ final class AppModel: ObservableObject {
                 fallbackSourceLabel: currentSourceLabel
             )
             recordingState = .recording(startedAt: .now)
+            logger.info("recording started successfully")
         } catch {
             recordingState = .idle
+            logger.error("recording start failed: \(error.localizedDescription, privacy: .public)")
             lastErrorMessage = error.localizedDescription
         }
     }

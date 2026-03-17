@@ -1,8 +1,11 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import OSLog
 
 struct ScreenRecordingPermissionService {
+    private static let logger = Logger(subsystem: "dev.floatrec.app", category: "permission")
+
     enum RuntimeInstallIssue {
         case diskImage
         case translocated
@@ -18,17 +21,23 @@ struct ScreenRecordingPermissionService {
     }
 
     func canAccess() -> Bool {
-        CGPreflightScreenCaptureAccess()
+        let granted = CGPreflightScreenCaptureAccess()
+        Self.logger.info(
+            "preflight screen capture access: granted=\(granted, privacy: .public) bundlePath=\(Bundle.main.bundleURL.path, privacy: .public)"
+        )
+        return granted
     }
 
     func ensureAccess() async -> Bool {
         if canAccess() {
+            Self.logger.info("screen capture access already granted before request")
             return true
         }
 
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let granted = CGRequestScreenCaptureAccess()
+                Self.logger.info("screen capture access request finished: granted=\(granted, privacy: .public)")
                 continuation.resume(returning: granted)
             }
         }

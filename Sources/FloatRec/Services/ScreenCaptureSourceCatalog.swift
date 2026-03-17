@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import ScreenCaptureKit
 
 enum ResolvedCaptureSource {
@@ -54,14 +55,22 @@ enum ResolvedCaptureSource {
 
 @MainActor
 final class ScreenCaptureSourceCatalog {
+    private let logger = Logger(subsystem: "dev.floatrec.app", category: "source-catalog")
     private var displaySourcesByID: [String: SCDisplay] = [:]
     private var windowSourcesByID: [String: SCWindow] = [:]
 
     func loadSnapshot() async throws -> CaptureSourceSnapshot {
-        let shareableContent = try await SCShareableContent.excludingDesktopWindows(
-            false,
-            onScreenWindowsOnly: true
-        )
+        logger.info("loading shareable content snapshot")
+        let shareableContent: SCShareableContent
+        do {
+            shareableContent = try await SCShareableContent.excludingDesktopWindows(
+                false,
+                onScreenWindowsOnly: true
+            )
+        } catch {
+            logger.error("failed loading shareable content: \(error.localizedDescription, privacy: .public)")
+            throw error
+        }
 
         let displays = shareableContent.displays.enumerated().map { index, display in
             let option = CaptureSourceOption(
@@ -95,6 +104,10 @@ final class ScreenCaptureSourceCatalog {
         .sorted { lhs, rhs in
             lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
         }
+
+        logger.info(
+            "loaded shareable content snapshot: displays=\(displays.count, privacy: .public) windows=\(windows.count, privacy: .public)"
+        )
 
         return CaptureSourceSnapshot(displays: displays, windows: windows)
     }
