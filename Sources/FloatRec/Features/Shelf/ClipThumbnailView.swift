@@ -68,6 +68,8 @@ struct ClipThumbnailView: View {
             .contentShape(RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
+        .disabled(clip.isPostProcessing)
+        .opacity(clip.isPostProcessing ? 0.78 : 1)
         .task(id: clip.id) {
             await appModel.loadThumbnailIfNeeded(for: clip)
         }

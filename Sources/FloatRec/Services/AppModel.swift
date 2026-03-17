@@ -307,16 +307,31 @@ final class AppModel: ObservableObject {
     }
 
     func revealClipInFinder(_ clip: RecordingClip) {
+        guard !clip.isPostProcessing else {
+            lastErrorMessage = "후처리 중에는 결과 클립이 아직 준비되지 않았습니다."
+            return
+        }
+
         NSWorkspace.shared.activateFileViewerSelecting([clip.fileURL])
     }
 
     func copyClipToPasteboard(_ clip: RecordingClip) {
+        guard !clip.isPostProcessing else {
+            lastErrorMessage = "후처리 완료 후 복사할 수 있습니다."
+            return
+        }
+
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.writeObjects([clip.fileURL as NSURL])
     }
 
     func openPreview(for clip: RecordingClip) {
+        guard !clip.isPostProcessing else {
+            lastErrorMessage = "후처리 완료 후 미리보기를 열 수 있습니다."
+            return
+        }
+
         let opened = NSWorkspace.shared.open(clip.fileURL)
         if !opened {
             lastErrorMessage = "미리보기를 열지 못했습니다."
@@ -324,6 +339,11 @@ final class AppModel: ObservableObject {
     }
 
     func saveClip(_ clip: RecordingClip) {
+        guard !clip.isPostProcessing else {
+            lastErrorMessage = "후처리 완료 후 저장할 수 있습니다."
+            return
+        }
+
         let savePanel = NSSavePanel()
         savePanel.title = "녹화 저장"
         savePanel.nameFieldStringValue = clip.fileURL.lastPathComponent
@@ -432,6 +452,7 @@ final class AppModel: ObservableObject {
 
     private func enqueuePostProcessing(for clip: RecordingClip, artifact: RecordingArtifact) {
         postProcessingTasks[clip.id]?.cancel()
+        logger.info("queued background post-processing for clip \(clip.id.uuidString, privacy: .public)")
         postProcessingTasks[clip.id] = Task { @MainActor [weak self] in
             guard let self else {
                 return
@@ -464,6 +485,17 @@ final class AppModel: ObservableObject {
             isTemporary: clip.isTemporary,
             isPostProcessing: false
         )
+
+        let postProcessingSucceeded =
+            processedArtifact.fileURL != clip.fileURL ||
+            processedArtifact.sourceLabel != clip.sourceLabel
+
+        if postProcessingSucceeded {
+            logger.info("background post-processing finished for clip \(clip.id.uuidString, privacy: .public)")
+        } else {
+            logger.error("background post-processing fell back to original clip \(clip.id.uuidString, privacy: .public)")
+            lastErrorMessage = "후처리가 완료되지 않아 원본 클립을 유지했습니다."
+        }
 
         if clip.fileURL != updatedClip.fileURL {
             clipThumbnails.removeValue(forKey: clip.fileURL)

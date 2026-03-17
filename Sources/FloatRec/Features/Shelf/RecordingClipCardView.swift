@@ -7,7 +7,7 @@ struct RecordingClipCardView: View {
     let clip: RecordingClip
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let cardBody = VStack(alignment: .leading, spacing: 14) {
             ClipThumbnailView(clip: clip)
 
             HStack(alignment: .top, spacing: 12) {
@@ -53,27 +53,32 @@ struct RecordingClipCardView: View {
                 Button("미리보기") {
                     appModel.openPreview(for: clip)
                 }
+                .disabled(clip.isPostProcessing)
 
                 Button("복사") {
                     appModel.copyClipToPasteboard(clip)
                 }
+                .disabled(clip.isPostProcessing)
 
                 Button("저장") {
                     appModel.saveClip(clip)
                 }
+                .disabled(clip.isPostProcessing)
 
                 ShareLink(item: clip.fileURL) {
                     Label("공유", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.borderless)
+                .disabled(clip.isPostProcessing)
 
                 Button("Finder") {
                     appModel.revealClipInFinder(clip)
                 }
+                .disabled(clip.isPostProcessing)
 
                 Spacer()
 
-                Text("드래그 가능")
+                Text(clip.isPostProcessing ? "후처리 완료 후 공유 가능" : "드래그 가능")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -96,27 +101,38 @@ struct RecordingClipCardView: View {
                 .stroke(Color.black.opacity(0.06), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.08), radius: 16, y: 8)
-        .onDrag {
-            NSItemProvider(object: clip.fileURL as NSURL)
-        }
-        .contextMenu {
-            Button("저장") {
-                appModel.saveClip(clip)
-            }
+        
+        if clip.isPostProcessing {
+            cardBody
+                .contextMenu {
+                    Button("닫기") {
+                        appModel.removeClip(clip)
+                    }
+                }
+        } else {
+            cardBody
+                .onDrag {
+                    NSItemProvider(object: clip.fileURL as NSURL)
+                }
+                .contextMenu {
+                    Button("저장") {
+                        appModel.saveClip(clip)
+                    }
 
-            Button("Finder에서 보기") {
-                appModel.revealClipInFinder(clip)
-            }
+                    Button("Finder에서 보기") {
+                        appModel.revealClipInFinder(clip)
+                    }
 
-            Button("복사") {
-                appModel.copyClipToPasteboard(clip)
-            }
+                    Button("복사") {
+                        appModel.copyClipToPasteboard(clip)
+                    }
 
-            Divider()
+                    Divider()
 
-            Button("닫기") {
-                appModel.removeClip(clip)
-            }
+                    Button("닫기") {
+                        appModel.removeClip(clip)
+                    }
+                }
         }
     }
 
