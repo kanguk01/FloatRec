@@ -177,6 +177,7 @@ final class AppModel: ObservableObject {
                 selectedSourceID: selectedSourceID,
                 areaSelection: areaSelection,
                 isAutoZoomEnabled: featureFlags.isAutoZoomEnabled,
+                isClickHighlightEnabled: featureFlags.isClickHighlightEnabled,
                 fallbackSourceLabel: currentSourceLabel
             )
             recordingState = .recording(startedAt: .now)

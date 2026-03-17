@@ -25,8 +25,13 @@ enum AutoZoomProcessorError: LocalizedError {
 }
 
 actor AutoZoomProcessor {
-    func process(_ artifact: RecordingArtifact) async throws -> RecordingArtifact {
-        guard let cursorTrack = artifact.cursorTrack, cursorTrack.isUsableForAutoZoom else {
+    func process(
+        _ artifact: RecordingArtifact,
+        isAutoZoomEnabled: Bool,
+        isClickHighlightEnabled: Bool
+    ) async throws -> RecordingArtifact {
+        guard let cursorTrack = artifact.cursorTrack,
+              cursorTrack.isUsableForAutoZoom || cursorTrack.hasClicks else {
             return artifact
         }
 
@@ -44,7 +49,9 @@ actor AutoZoomProcessor {
             let outputImage = Self.makeFrame(
                 request: request,
                 renderSize: renderSize,
-                cursorTrack: cursorTrack
+                cursorTrack: cursorTrack,
+                isAutoZoomEnabled: isAutoZoomEnabled,
+                isClickHighlightEnabled: isClickHighlightEnabled
             )
             request.finish(with: outputImage, context: nil)
         }
@@ -67,7 +74,11 @@ actor AutoZoomProcessor {
         return RecordingArtifact(
             fileURL: outputURL,
             duration: artifact.duration,
-            sourceLabel: "\(artifact.sourceLabel) · 자동 줌",
+            sourceLabel: processedLabel(
+                base: artifact.sourceLabel,
+                isAutoZoomEnabled: isAutoZoomEnabled,
+                isClickHighlightEnabled: isClickHighlightEnabled
+            ),
             cursorTrack: cursorTrack
         )
     }
@@ -101,47 +112,63 @@ actor AutoZoomProcessor {
     private static func makeFrame(
         request: AVAsynchronousCIImageFilteringRequest,
         renderSize: CGSize,
-        cursorTrack: CursorTrack
+        cursorTrack: CursorTrack,
+        isAutoZoomEnabled: Bool,
+        isClickHighlightEnabled: Bool
     ) -> CIImage {
         let sourceImage = request.sourceImage
         let currentTime = request.compositionTime.seconds
-        let focusPoint = interpolatedPoint(at: currentTime, samples: cursorTrack.samples)
+        let baseImage: CIImage
 
-        let zoomFactor = zoomFactor(at: currentTime, samples: cursorTrack.samples)
-        let cropSize = CGSize(
-            width: renderSize.width / zoomFactor,
-            height: renderSize.height / zoomFactor
-        )
-
-        let focusX = sourceImage.extent.minX + sourceImage.extent.width * focusPoint.x
-        let focusY = sourceImage.extent.minY + sourceImage.extent.height * focusPoint.y
-
-        let cropOrigin = CGPoint(
-            x: clamp(
-                focusX - cropSize.width / 2,
-                min: sourceImage.extent.minX,
-                max: sourceImage.extent.maxX - cropSize.width
-            ),
-            y: clamp(
-                focusY - cropSize.height / 2,
-                min: sourceImage.extent.minY,
-                max: sourceImage.extent.maxY - cropSize.height
+        if isAutoZoomEnabled, cursorTrack.isUsableForAutoZoom {
+            let focusPoint = interpolatedPoint(at: currentTime, samples: cursorTrack.samples)
+            let zoomFactor = zoomFactor(at: currentTime, samples: cursorTrack.samples)
+            let cropSize = CGSize(
+                width: renderSize.width / zoomFactor,
+                height: renderSize.height / zoomFactor
             )
-        )
 
-        let cropRect = CGRect(origin: cropOrigin, size: cropSize).integral
-        let cropped = sourceImage.cropped(to: cropRect)
-        let translated = cropped.transformed(
-            by: CGAffineTransform(translationX: -cropRect.minX, y: -cropRect.minY)
-        )
-        let scaled = translated.transformed(
-            by: CGAffineTransform(
-                scaleX: renderSize.width / cropRect.width,
-                y: renderSize.height / cropRect.height
+            let focusX = sourceImage.extent.minX + sourceImage.extent.width * focusPoint.x
+            let focusY = sourceImage.extent.minY + sourceImage.extent.height * focusPoint.y
+
+            let cropOrigin = CGPoint(
+                x: clamp(
+                    focusX - cropSize.width / 2,
+                    min: sourceImage.extent.minX,
+                    max: sourceImage.extent.maxX - cropSize.width
+                ),
+                y: clamp(
+                    focusY - cropSize.height / 2,
+                    min: sourceImage.extent.minY,
+                    max: sourceImage.extent.maxY - cropSize.height
+                )
             )
-        )
 
-        return scaled.cropped(to: CGRect(origin: .zero, size: renderSize))
+            let cropRect = CGRect(origin: cropOrigin, size: cropSize).integral
+            let cropped = sourceImage.cropped(to: cropRect)
+            let translated = cropped.transformed(
+                by: CGAffineTransform(translationX: -cropRect.minX, y: -cropRect.minY)
+            )
+            baseImage = translated.transformed(
+                by: CGAffineTransform(
+                    scaleX: renderSize.width / cropRect.width,
+                    y: renderSize.height / cropRect.height
+                )
+            )
+            .cropped(to: CGRect(origin: .zero, size: renderSize))
+        } else {
+            baseImage = sourceImage.cropped(to: CGRect(origin: .zero, size: renderSize))
+        }
+
+        guard isClickHighlightEnabled, let rippleImage = rippleOverlay(
+            at: currentTime,
+            renderSize: renderSize,
+            cursorTrack: cursorTrack
+        ) else {
+            return baseImage
+        }
+
+        return rippleImage.composited(over: baseImage)
     }
 
     private static func interpolatedPoint(at time: TimeInterval, samples: [CursorTrackSample]) -> CGPoint {
@@ -194,5 +221,95 @@ actor AutoZoomProcessor {
 
     private static func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
         Swift.min(Swift.max(value, minimum), maximum)
+    }
+
+    private static func rippleOverlay(
+        at time: TimeInterval,
+        renderSize: CGSize,
+        cursorTrack: CursorTrack
+    ) -> CIImage? {
+        let clickDuration: TimeInterval = 0.52
+        let activeClicks = cursorTrack.clickSamples.filter { click in
+            let age = time - click.time
+            return age >= 0 && age <= clickDuration
+        }
+
+        guard !activeClicks.isEmpty else {
+            return nil
+        }
+
+        let extent = CGRect(origin: .zero, size: renderSize)
+        var image = CIImage.empty().cropped(to: extent)
+
+        for click in activeClicks {
+            let age = time - click.time
+            let progress = age / clickDuration
+            let center = CIVector(
+                x: renderSize.width * click.normalizedLocation.x,
+                y: renderSize.height * click.normalizedLocation.y
+            )
+
+            let radius = 18 + 120 * progress
+            if let pulse = radialGradient(
+                center: center,
+                radius0: max(radius - 16, 0),
+                radius1: radius,
+                color0: CIColor(red: 1.0, green: 0.33, blue: 0.16, alpha: 0.34 * (1 - progress)),
+                color1: CIColor.clear
+            ) {
+                image = pulse.cropped(to: extent).composited(over: image)
+            }
+
+            if let core = radialGradient(
+                center: center,
+                radius0: 0,
+                radius1: 14 + 18 * progress,
+                color0: CIColor(red: 1.0, green: 0.44, blue: 0.22, alpha: 0.18 * (1 - progress)),
+                color1: CIColor.clear
+            ) {
+                image = core.cropped(to: extent).composited(over: image)
+            }
+        }
+
+        return image
+    }
+
+    private func processedLabel(
+        base: String,
+        isAutoZoomEnabled: Bool,
+        isClickHighlightEnabled: Bool
+    ) -> String {
+        if isAutoZoomEnabled && isClickHighlightEnabled {
+            return "\(base) · 자동 줌 · 클릭 강조"
+        }
+
+        if isAutoZoomEnabled {
+            return "\(base) · 자동 줌"
+        }
+
+        if isClickHighlightEnabled {
+            return "\(base) · 클릭 강조"
+        }
+
+        return base
+    }
+
+    private static func radialGradient(
+        center: CIVector,
+        radius0: CGFloat,
+        radius1: CGFloat,
+        color0: CIColor,
+        color1: CIColor
+    ) -> CIImage? {
+        guard let filter = CIFilter(name: "CIRadialGradient") else {
+            return nil
+        }
+
+        filter.setValue(center, forKey: "inputCenter")
+        filter.setValue(radius0, forKey: "inputRadius0")
+        filter.setValue(radius1, forKey: "inputRadius1")
+        filter.setValue(color0, forKey: "inputColor0")
+        filter.setValue(color1, forKey: "inputColor1")
+        return filter.outputImage
     }
 }

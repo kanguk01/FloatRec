@@ -97,10 +97,19 @@ struct MenuBarContentView: View {
             HStack {
                 Label(
                     appModel.featureFlags.isAutoZoomEnabled ? "자동 줌 켜짐" : "자동 줌 꺼짐",
-                    systemImage: appModel.featureFlags.isAutoZoomEnabled ? "scope" : "scope"
+                    systemImage: "scope"
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+                if appModel.featureFlags.isClickHighlightEnabled {
+                    Text("클릭 강조")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.orange.opacity(0.12), in: Capsule())
+                        .foregroundStyle(.orange)
+                }
 
                 Spacer()
             }
@@ -125,8 +134,9 @@ struct MenuBarContentView: View {
                     ProgressView()
                         .controlSize(.small)
 
-                    if case .processing = appModel.recordingState, appModel.featureFlags.isAutoZoomEnabled {
-                        Text("커서 추적 기반 자동 줌 결과물을 정리 중입니다.")
+                    if case .processing = appModel.recordingState,
+                       appModel.featureFlags.isAutoZoomEnabled || appModel.featureFlags.isClickHighlightEnabled {
+                        Text("커서 추적 기반 후처리 결과물을 정리 중입니다.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }

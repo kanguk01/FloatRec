@@ -12,7 +12,7 @@ final class ScreenCaptureRecorder: NSObject {
     private var recordingDidStartContinuation: CheckedContinuation<Void, Error>?
     private var recordingDidFinishContinuation: CheckedContinuation<Void, Error>?
 
-    func start(source: ResolvedCaptureSource) async throws {
+    func start(source: ResolvedCaptureSource, showBuiltInClickHighlight: Bool) async throws {
         let filter = source.makeFilter()
         let configuration = SCStreamConfiguration()
         let captureSize = bestCaptureSize(for: source, filter: filter)
@@ -23,7 +23,7 @@ final class ScreenCaptureRecorder: NSObject {
         configuration.showsCursor = true
         configuration.queueDepth = 6
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
-        configuration.showMouseClicks = true
+        configuration.showMouseClicks = showBuiltInClickHighlight
         if let sourceRect = source.sourceRect {
             configuration.sourceRect = sourceRect
         }

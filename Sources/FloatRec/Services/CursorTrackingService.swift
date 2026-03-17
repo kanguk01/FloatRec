@@ -4,9 +4,11 @@ import Foundation
 @MainActor
 final class CursorTrackingService {
     private var trackingTask: Task<Void, Never>?
+    private var globalMouseMonitor: Any?
     private var startedAt: TimeInterval?
     private var trackingRect: CGRect?
     private var samples: [CursorTrackSample] = []
+    private var clickSamples: [CursorClickSample] = []
 
     func startTracking(for source: ResolvedCaptureSource, enabled: Bool) {
         _ = stopTracking()
@@ -18,6 +20,7 @@ final class CursorTrackingService {
         self.trackingRect = trackingRect
         self.startedAt = ProcessInfo.processInfo.systemUptime
         captureSample()
+        installGlobalMouseMonitor()
 
         trackingTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -34,15 +37,17 @@ final class CursorTrackingService {
         captureSample()
         trackingTask?.cancel()
         trackingTask = nil
+        removeGlobalMouseMonitor()
 
         defer {
             startedAt = nil
             trackingRect = nil
             samples.removeAll()
+            clickSamples.removeAll()
         }
 
-        let result = CursorTrack(samples: samples)
-        return result.isUsableForAutoZoom ? result : nil
+        let result = CursorTrack(samples: samples, clickSamples: clickSamples)
+        return result.isUsableForAutoZoom || result.hasClicks ? result : nil
     }
 
     private func captureSample() {
@@ -75,6 +80,47 @@ final class CursorTrackingService {
 
         samples.append(
             CursorTrackSample(
+                time: timestamp,
+                normalizedLocation: normalizedLocation
+            )
+        )
+    }
+
+    private func installGlobalMouseMonitor() {
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.captureClick(from: event)
+            }
+        }
+    }
+
+    private func removeGlobalMouseMonitor() {
+        if let globalMouseMonitor {
+            NSEvent.removeMonitor(globalMouseMonitor)
+            self.globalMouseMonitor = nil
+        }
+    }
+
+    private func captureClick(from event: NSEvent) {
+        guard let startedAt, let trackingRect else {
+            return
+        }
+
+        let globalLocation = event.locationInWindow
+        guard trackingRect.contains(globalLocation) else {
+            return
+        }
+
+        let normalizedLocation = CGPoint(
+            x: (globalLocation.x - trackingRect.minX) / trackingRect.width,
+            y: (globalLocation.y - trackingRect.minY) / trackingRect.height
+        )
+
+        let timestamp = ProcessInfo.processInfo.systemUptime - startedAt
+        clickSamples.append(
+            CursorClickSample(
                 time: timestamp,
                 normalizedLocation: normalizedLocation
             )

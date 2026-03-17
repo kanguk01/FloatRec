@@ -26,12 +26,22 @@ struct SettingsView: View {
             }
             .toggleStyle(.switch)
 
+            Toggle(isOn: $appModel.featureFlags.isClickHighlightEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("클릭 리플 강조")
+                    Text("클릭 순간에 주황색 리플을 얹어 사용자의 시선을 더 명확하게 유도합니다.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
+
             Spacer()
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("다음 단계")
                     .font(.headline)
-                Text("윈도우 모드 자동 줌, 클릭 리플 강조, Shelf 썸네일 미리보기를 다음 단계로 연결할 예정입니다.")
+                Text("윈도우 모드 후처리, Shelf 썸네일 미리보기, 공유 카드 고도화를 다음 단계로 연결할 예정입니다.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

@@ -8,6 +8,7 @@ final class RecordingCoordinator {
     private let autoZoomProcessor: AutoZoomProcessor
     private var liveRecorder: AnyObject?
     private var isAutoZoomEnabled = true
+    private var isClickHighlightEnabled = true
 
     init(
         sourceCatalog: ScreenCaptureSourceCatalog,
@@ -26,9 +27,11 @@ final class RecordingCoordinator {
         selectedSourceID: String?,
         areaSelection: AreaSelection?,
         isAutoZoomEnabled: Bool,
+        isClickHighlightEnabled: Bool,
         fallbackSourceLabel: String
     ) async throws {
         self.isAutoZoomEnabled = isAutoZoomEnabled
+        self.isClickHighlightEnabled = isClickHighlightEnabled
         if #available(macOS 15.0, *) {
             let resolvedSource: ResolvedCaptureSource?
 
@@ -44,8 +47,13 @@ final class RecordingCoordinator {
             if let resolvedSource {
                 let recorder = ScreenCaptureRecorder()
                 do {
-                    cursorTrackingService.startTracking(for: resolvedSource, enabled: isAutoZoomEnabled)
-                    try await recorder.start(source: resolvedSource)
+                    let needsPostProcessing = isAutoZoomEnabled || isClickHighlightEnabled
+                    cursorTrackingService.startTracking(for: resolvedSource, enabled: needsPostProcessing)
+                    let useCustomClickHighlight = isClickHighlightEnabled && resolvedSource.autoZoomTrackingRect != nil
+                    try await recorder.start(
+                        source: resolvedSource,
+                        showBuiltInClickHighlight: !useCustomClickHighlight
+                    )
                     liveRecorder = recorder
                     return
                 } catch {
@@ -72,12 +80,16 @@ final class RecordingCoordinator {
                 cursorTrack: cursorTrack
             )
 
-            guard isAutoZoomEnabled else {
+            guard isAutoZoomEnabled || isClickHighlightEnabled else {
                 return liveArtifact
             }
 
             do {
-                return try await autoZoomProcessor.process(liveArtifact)
+                return try await autoZoomProcessor.process(
+                    liveArtifact,
+                    isAutoZoomEnabled: isAutoZoomEnabled,
+                    isClickHighlightEnabled: isClickHighlightEnabled
+                )
             } catch {
                 return liveArtifact
             }
