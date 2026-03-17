@@ -28,6 +28,21 @@ final class AppModel: ObservableObject {
     private let recordingCoordinator: RecordingCoordinator
     private let thumbnailService = ClipThumbnailService()
     private let areaSelectionOverlayController = AreaSelectionOverlayController()
+    private lazy var captureTargetPickerController: CaptureTargetPickerController = {
+        let controller = CaptureTargetPickerController()
+        controller.onSelection = { [weak self] selection in
+            Task { @MainActor [weak self] in
+                await self?.applyCaptureTargetSelection(selection)
+            }
+        }
+        controller.onCancel = { [weak self] in
+            self?.logger.info("content picker selection cancelled")
+        }
+        controller.onError = { [weak self] error in
+            self?.lastErrorMessage = "캡처 대상을 선택하지 못했습니다: \(error.localizedDescription)"
+        }
+        return controller
+    }()
     private var postProcessingTasks: [UUID: Task<Void, Never>] = [:]
     private lazy var shelfController = ShelfWindowController()
     private lazy var settingsWindowController = SettingsWindowController()
@@ -77,10 +92,10 @@ final class AppModel: ObservableObject {
 
     var selectedSourceOption: CaptureSourceOption? {
         guard let selectedSourceID else {
-            return currentSourceOptions.first
+            return nil
         }
 
-        return currentSourceOptions.first(where: { $0.id == selectedSourceID }) ?? currentSourceOptions.first
+        return currentSourceOptions.first(where: { $0.id == selectedSourceID })
     }
 
     var captureSelectionSummary: String {
@@ -88,7 +103,7 @@ final class AppModel: ObservableObject {
         case .area:
             lastAreaSelectionDescription ?? "녹화 시작을 누르면 드래그로 영역을 선택합니다."
         case .display, .window:
-            selectedSourceOption?.detail ?? "캡처 대상을 불러오지 않았습니다."
+            selectedSourceOption?.detail ?? "\(captureMode.title) 대상을 화면에서 직접 선택해 주세요."
         }
     }
 
@@ -252,6 +267,15 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func presentCaptureTargetPicker() {
+        guard captureMode != .area else {
+            return
+        }
+
+        lastErrorMessage = nil
+        captureTargetPickerController.present(for: captureMode)
+    }
+
     func showShelf() {
         shelfController.show(using: self)
     }
@@ -395,8 +419,15 @@ final class AppModel: ObservableObject {
                 return
             }
 
-            selectedSourceID = currentSourceOptions.first?.id
+            selectedSourceID = nil
         }
+    }
+
+    private func applyCaptureTargetSelection(_ selection: CaptureTargetPickerController.Selection) async {
+        captureMode = selection.mode
+        await refreshCaptureSources(force: false)
+        selectedSourceID = selection.sourceID
+        lastErrorMessage = nil
     }
 
     private func enqueuePostProcessing(for clip: RecordingClip, artifact: RecordingArtifact) {

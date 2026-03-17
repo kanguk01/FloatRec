@@ -50,47 +50,46 @@ struct MenuBarContentView: View {
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                } else if appModel.currentSourceOptions.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("캡처 소스를 아직 불러오지 못했습니다.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Button("소스 새로고침") {
-                            Task {
-                                await appModel.refreshCaptureSources(force: true)
-                            }
-                        }
-                        .disabled(appModel.isRefreshingSources)
-                    }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 } else {
-                    Picker("대상", selection: sourceSelectionBinding) {
-                        ForEach(appModel.currentSourceOptions) { source in
-                            VStack(alignment: .leading) {
-                                Text(source.title).tag(source.id)
-                            }
-                        }
-                    }
-                    .labelsHidden()
-
-                    HStack {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(appModel.captureSelectionSummary)
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        Spacer()
-
-                        Button("새로고침") {
-                            Task {
-                                await appModel.refreshCaptureSources(force: true)
-                            }
+                        Button {
+                            appModel.presentCaptureTargetPicker()
+                        } label: {
+                            Label("화면에서 선택", systemImage: "cursorarrow.click")
+                                .frame(maxWidth: .infinity)
                         }
-                        .font(.caption)
-                        .disabled(appModel.isRefreshingSources)
+                        .buttonStyle(.borderedProminent)
+
+                        HStack {
+                            if let selectedSource = appModel.selectedSourceOption {
+                                Text(selectedSource.title)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            } else {
+                                Text("호버로 강조된 대상을 클릭하면 바로 선택됩니다.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button("새로고침") {
+                                Task {
+                                    await appModel.refreshCaptureSources(force: true)
+                                }
+                            }
+                            .font(.caption)
+                            .disabled(appModel.isRefreshingSources)
+                        }
                     }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
             }
 
@@ -233,12 +232,5 @@ struct MenuBarContentView: View {
         .task {
             await appModel.refreshCaptureSourcesIfNeeded()
         }
-    }
-
-    private var sourceSelectionBinding: Binding<String> {
-        Binding(
-            get: { appModel.selectedSourceID ?? appModel.currentSourceOptions.first?.id ?? "" },
-            set: { appModel.selectedSourceID = $0 }
-        )
     }
 }

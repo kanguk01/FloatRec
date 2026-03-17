@@ -86,17 +86,14 @@ final class ScreenCaptureSourceCatalog {
         let windows = shareableContent.windows.compactMap { window -> CaptureSourceOption? in
             let windowTitle = (window.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
             let appName = window.owningApplication?.applicationName ?? "앱 이름 없음"
-
-            guard !windowTitle.isEmpty else {
-                return nil
-            }
-
             let size = window.frame.size
+            let title = windowTitle.isEmpty ? "\(appName) 창" : windowTitle
+            let sourceLabel = windowTitle.isEmpty ? appName : "\(appName) · \(windowTitle)"
             let option = CaptureSourceOption(
                 id: "window-\(window.windowID)",
-                title: windowTitle,
+                title: title,
                 detail: "\(appName) · \(Int(size.width))×\(Int(size.height))",
-                sourceLabel: "\(appName) · \(windowTitle)"
+                sourceLabel: sourceLabel
             )
             windowSourcesByID[option.id] = window
             return option
