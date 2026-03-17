@@ -1,7 +1,9 @@
 import Foundation
+import OSLog
 
 @MainActor
 final class RecordingCoordinator {
+    private let logger = Logger(subsystem: "dev.floatrec.app", category: "recording-coordinator")
     private let sourceCatalog: ScreenCaptureSourceCatalog
     private let demoRecordingService: DemoRecordingService
     private let cursorTrackingService: CursorTrackingService
@@ -48,6 +50,9 @@ final class RecordingCoordinator {
                 let recorder = ScreenCaptureRecorder()
                 do {
                     let needsPostProcessing = isAutoZoomEnabled || isClickHighlightEnabled
+                    logger.info(
+                        "start recording resolved source: mode=\(mode.title, privacy: .public) sourceLabel=\(resolvedSource.sourceLabel, privacy: .public) autoZoom=\(isAutoZoomEnabled, privacy: .public) clickHighlight=\(isClickHighlightEnabled, privacy: .public) trackingRectAvailable=\(resolvedSource.autoZoomTrackingRect != nil, privacy: .public)"
+                    )
                     cursorTrackingService.startTracking(for: resolvedSource, enabled: needsPostProcessing)
                     let useCustomClickHighlight = isClickHighlightEnabled && resolvedSource.autoZoomTrackingRect != nil
                     try await recorder.start(
@@ -73,6 +78,9 @@ final class RecordingCoordinator {
             defer { self.liveRecorder = nil }
             let cursorTrack = cursorTrackingService.stopTracking()
             let artifact = try await recorder.stopRecording()
+            logger.info(
+                "stop recording produced artifact: duration=\(artifact.duration, privacy: .public)s cursorTrack=\(cursorTrack != nil, privacy: .public) sampleCount=\(cursorTrack?.samples.count ?? 0, privacy: .public) clickCount=\(cursorTrack?.clickSamples.count ?? 0, privacy: .public)"
+            )
             return RecordingArtifact(
                 fileURL: artifact.fileURL,
                 duration: artifact.duration,
@@ -97,6 +105,9 @@ final class RecordingCoordinator {
 
     func processRecordedArtifact(_ artifact: RecordingArtifact) async -> RecordingArtifact {
         guard shouldPostProcess(artifact) else {
+            logger.info(
+                "skip post-processing: duration=\(artifact.duration, privacy: .public)s cursorTrack=\(artifact.cursorTrack != nil, privacy: .public) sampleCount=\(artifact.cursorTrack?.samples.count ?? 0, privacy: .public) clickCount=\(artifact.cursorTrack?.clickSamples.count ?? 0, privacy: .public)"
+            )
             return artifact
         }
 
@@ -108,13 +119,20 @@ final class RecordingCoordinator {
         }
 
         do {
-            return try await processWithTimeout(
+            logger.info(
+                "start post-processing: duration=\(artifact.duration, privacy: .public)s timeout=\(timeoutSeconds, privacy: .public)s sampleCount=\(artifact.cursorTrack?.samples.count ?? 0, privacy: .public) clickCount=\(artifact.cursorTrack?.clickSamples.count ?? 0, privacy: .public)"
+            )
+            let processedArtifact = try await processWithTimeout(
                 artifact,
                 isAutoZoomEnabled: isAutoZoomEnabled,
                 isClickHighlightEnabled: isClickHighlightEnabled,
                 timeout: .seconds(timeoutSeconds)
             )
+            let changed = processedArtifact.fileURL != artifact.fileURL || processedArtifact.sourceLabel != artifact.sourceLabel
+            logger.info("finish post-processing: changed=\(changed, privacy: .public)")
+            return processedArtifact
         } catch {
+            logger.error("post-processing failed: \(error.localizedDescription, privacy: .public)")
             return artifact
         }
     }

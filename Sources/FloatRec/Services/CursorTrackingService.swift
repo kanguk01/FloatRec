@@ -1,8 +1,10 @@
 import AppKit
 import Foundation
+import OSLog
 
 @MainActor
 final class CursorTrackingService {
+    private let logger = Logger(subsystem: "dev.floatrec.app", category: "cursor-tracking")
     private var trackingTask: Task<Void, Never>?
     private var globalMouseMonitor: Any?
     private var startedAt: TimeInterval?
@@ -14,11 +16,15 @@ final class CursorTrackingService {
         _ = stopTracking()
 
         guard enabled, let trackingRect = source.autoZoomTrackingRect, trackingRect.width > 0, trackingRect.height > 0 else {
+            logger.info(
+                "cursor tracking skipped: enabled=\(enabled, privacy: .public) trackingRectAvailable=\(source.autoZoomTrackingRect != nil, privacy: .public)"
+            )
             return
         }
 
         self.trackingRect = trackingRect
         self.startedAt = ProcessInfo.processInfo.systemUptime
+        logger.info("cursor tracking started: rect=\(self.rectDescription(trackingRect), privacy: .public)")
         captureSample()
         installGlobalMouseMonitor()
 
@@ -47,6 +53,9 @@ final class CursorTrackingService {
         }
 
         let result = CursorTrack(samples: samples, clickSamples: clickSamples)
+        logger.info(
+            "cursor tracking stopped: samples=\(result.samples.count, privacy: .public) clicks=\(result.clickSamples.count, privacy: .public) usable=\(result.isUsableForAutoZoom, privacy: .public)"
+        )
         return result.isUsableForAutoZoom || result.hasClicks ? result : nil
     }
 
@@ -124,5 +133,9 @@ final class CursorTrackingService {
                 normalizedLocation: normalizedLocation
             )
         )
+    }
+
+    private func rectDescription(_ rect: CGRect) -> String {
+        "(\(Int(rect.minX)),\(Int(rect.minY))) \(Int(rect.width))x\(Int(rect.height))"
     }
 }

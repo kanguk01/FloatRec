@@ -240,6 +240,9 @@ final class AppModel: ObservableObject {
             let artifact = try await recordingCoordinator.stopRecording()
             let finalArtifact: RecordingArtifact
             let shouldProcessInBackground = recordingCoordinator.shouldProcessInBackground(artifact)
+            logger.info(
+                "stop recording summary: duration=\(artifact.duration, privacy: .public)s background=\(shouldProcessInBackground, privacy: .public) sync=\(self.recordingCoordinator.shouldProcessSynchronously(artifact), privacy: .public) cursorTrack=\(artifact.cursorTrack != nil, privacy: .public)"
+            )
 
             if recordingCoordinator.shouldProcessSynchronously(artifact) {
                 finalArtifact = await recordingCoordinator.processRecordedArtifact(artifact)
