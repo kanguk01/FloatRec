@@ -39,8 +39,8 @@ enum ResolvedCaptureSource {
         switch self {
         case let .display(display, _):
             display.frame
-        case .window:
-            nil
+        case let .window(window, _):
+            window.frame
         case let .area(display, sourceRect, _):
             CGRect(
                 x: display.frame.minX + sourceRect.minX,

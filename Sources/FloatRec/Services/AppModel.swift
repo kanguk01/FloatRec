@@ -244,6 +244,12 @@ final class AppModel: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([clip.fileURL])
     }
 
+    func copyClipToPasteboard(_ clip: RecordingClip) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([clip.fileURL as NSURL])
+    }
+
     func openPreview(for clip: RecordingClip) {
         previewWindowController.show(clip: clip)
     }

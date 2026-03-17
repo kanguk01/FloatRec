@@ -46,6 +46,10 @@ struct RecordingClipCardView: View {
                     appModel.openPreview(for: clip)
                 }
 
+                Button("복사") {
+                    appModel.copyClipToPasteboard(clip)
+                }
+
                 Button("저장") {
                     appModel.saveClip(clip)
                 }
@@ -94,6 +98,10 @@ struct RecordingClipCardView: View {
 
             Button("Finder에서 보기") {
                 appModel.revealClipInFinder(clip)
+            }
+
+            Button("복사") {
+                appModel.copyClipToPasteboard(clip)
             }
 
             Divider()
