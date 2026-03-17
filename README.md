@@ -28,3 +28,14 @@ macOS 메뉴바 기반 화면 녹화 도구의 초기 프로토타입입니다.
 ```bash
 swift run
 ```
+
+DMG 빌드:
+
+```bash
+./scripts/build_dmg.sh
+```
+
+산출물:
+
+- `dist/FloatRec.dmg`
+- `dist` 산출물은 git 추적에서 제외됩니다.
