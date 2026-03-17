@@ -34,6 +34,22 @@ enum ResolvedCaptureSource {
             sourceRect
         }
     }
+
+    var autoZoomTrackingRect: CGRect? {
+        switch self {
+        case let .display(display, _):
+            display.frame
+        case .window:
+            nil
+        case let .area(display, sourceRect, _):
+            CGRect(
+                x: display.frame.minX + sourceRect.minX,
+                y: display.frame.minY + sourceRect.minY,
+                width: sourceRect.width,
+                height: sourceRect.height
+            )
+        }
+    }
 }
 
 @MainActor

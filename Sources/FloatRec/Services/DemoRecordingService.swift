@@ -7,6 +7,7 @@ struct RecordingArtifact {
     let fileURL: URL
     let duration: TimeInterval
     let sourceLabel: String
+    let cursorTrack: CursorTrack?
 }
 
 private final class AssetWriterBox: @unchecked Sendable {
@@ -64,7 +65,8 @@ actor DemoRecordingService {
         return RecordingArtifact(
             fileURL: outputURL,
             duration: clampedDuration,
-            sourceLabel: currentSourceLabel
+            sourceLabel: currentSourceLabel,
+            cursorTrack: nil
         )
     }
 

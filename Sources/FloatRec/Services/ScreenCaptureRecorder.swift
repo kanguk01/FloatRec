@@ -87,7 +87,8 @@ final class ScreenCaptureRecorder: NSObject {
         return RecordingArtifact(
             fileURL: outputURL,
             duration: max(durationFallback, 1),
-            sourceLabel: sourceLabel ?? "실녹화"
+            sourceLabel: sourceLabel ?? "실녹화",
+            cursorTrack: nil
         )
     }
 

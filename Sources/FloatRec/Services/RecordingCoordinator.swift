@@ -4,22 +4,31 @@ import Foundation
 final class RecordingCoordinator {
     private let sourceCatalog: ScreenCaptureSourceCatalog
     private let demoRecordingService: DemoRecordingService
+    private let cursorTrackingService: CursorTrackingService
+    private let autoZoomProcessor: AutoZoomProcessor
     private var liveRecorder: AnyObject?
+    private var isAutoZoomEnabled = true
 
     init(
         sourceCatalog: ScreenCaptureSourceCatalog,
-        demoRecordingService: DemoRecordingService
+        demoRecordingService: DemoRecordingService,
+        cursorTrackingService: CursorTrackingService = CursorTrackingService(),
+        autoZoomProcessor: AutoZoomProcessor = AutoZoomProcessor()
     ) {
         self.sourceCatalog = sourceCatalog
         self.demoRecordingService = demoRecordingService
+        self.cursorTrackingService = cursorTrackingService
+        self.autoZoomProcessor = autoZoomProcessor
     }
 
     func startRecording(
         mode: CaptureMode,
         selectedSourceID: String?,
         areaSelection: AreaSelection?,
+        isAutoZoomEnabled: Bool,
         fallbackSourceLabel: String
     ) async throws {
+        self.isAutoZoomEnabled = isAutoZoomEnabled
         if #available(macOS 15.0, *) {
             let resolvedSource: ResolvedCaptureSource?
 
@@ -35,10 +44,12 @@ final class RecordingCoordinator {
             if let resolvedSource {
                 let recorder = ScreenCaptureRecorder()
                 do {
+                    cursorTrackingService.startTracking(for: resolvedSource, enabled: isAutoZoomEnabled)
                     try await recorder.start(source: resolvedSource)
                     liveRecorder = recorder
                     return
                 } catch {
+                    _ = cursorTrackingService.stopTracking()
                     liveRecorder = nil
                     throw error
                 }
@@ -52,7 +63,24 @@ final class RecordingCoordinator {
         if #available(macOS 15.0, *),
            let recorder = liveRecorder as? ScreenCaptureRecorder {
             defer { self.liveRecorder = nil }
-            return try await recorder.stopRecording()
+            let cursorTrack = cursorTrackingService.stopTracking()
+            let artifact = try await recorder.stopRecording()
+            let liveArtifact = RecordingArtifact(
+                fileURL: artifact.fileURL,
+                duration: artifact.duration,
+                sourceLabel: artifact.sourceLabel,
+                cursorTrack: cursorTrack
+            )
+
+            guard isAutoZoomEnabled else {
+                return liveArtifact
+            }
+
+            do {
+                return try await autoZoomProcessor.process(liveArtifact)
+            } catch {
+                return liveArtifact
+            }
         }
 
         return try await demoRecordingService.stopRecording()

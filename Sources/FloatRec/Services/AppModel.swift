@@ -16,6 +16,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var isRefreshingSources = false
     @Published var lastErrorMessage: String?
     @Published private(set) var lastAreaSelectionDescription: String?
+    @Published var featureFlags = RecordingFeatureFlags()
 
     let hotKeyDisplayString = "⌘⇧9"
 
@@ -175,6 +176,7 @@ final class AppModel: ObservableObject {
                 mode: captureMode,
                 selectedSourceID: selectedSourceID,
                 areaSelection: areaSelection,
+                isAutoZoomEnabled: featureFlags.isAutoZoomEnabled,
                 fallbackSourceLabel: currentSourceLabel
             )
             recordingState = .recording(startedAt: .now)

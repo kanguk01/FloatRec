@@ -94,6 +94,17 @@ struct MenuBarContentView: View {
                 }
             }
 
+            HStack {
+                Label(
+                    appModel.featureFlags.isAutoZoomEnabled ? "자동 줌 켜짐" : "자동 줌 꺼짐",
+                    systemImage: appModel.featureFlags.isAutoZoomEnabled ? "scope" : "scope"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+
             Button {
                 Task {
                     await appModel.toggleRecording()
@@ -110,8 +121,16 @@ struct MenuBarContentView: View {
             .disabled(appModel.recordingState.isBusy)
 
             if appModel.recordingState.isBusy {
-                ProgressView()
-                    .controlSize(.small)
+                VStack(alignment: .leading, spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+
+                    if case .processing = appModel.recordingState, appModel.featureFlags.isAutoZoomEnabled {
+                        Text("커서 추적 기반 자동 줌 결과물을 정리 중입니다.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             if let latestClip = appModel.latestClip {
