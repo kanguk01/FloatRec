@@ -29,7 +29,6 @@ final class AppModel: ObservableObject {
     private let thumbnailService = ClipThumbnailService()
     private let areaSelectionOverlayController = AreaSelectionOverlayController()
     private lazy var shelfController = ShelfWindowController()
-    private lazy var previewWindowController = ClipPreviewWindowController()
     private lazy var settingsWindowController = SettingsWindowController()
     private lazy var hotKeyManager: GlobalHotKeyManager = {
         let manager = GlobalHotKeyManager()
@@ -276,7 +275,10 @@ final class AppModel: ObservableObject {
     }
 
     func openPreview(for clip: RecordingClip) {
-        previewWindowController.show(clip: clip)
+        let opened = NSWorkspace.shared.open(clip.fileURL)
+        if !opened {
+            lastErrorMessage = "미리보기를 열지 못했습니다."
+        }
     }
 
     func saveClip(_ clip: RecordingClip) {
