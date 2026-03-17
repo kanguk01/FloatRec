@@ -9,7 +9,7 @@ struct ShelfContainerView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("FloatRec Shelf")
                         .font(.title3.weight(.semibold))
-                    Text("녹화가 끝난 클립을 여기서 바로 드래그하거나 저장합니다.")
+                    Text("녹화가 끝난 클립을 여기서 미리보고, 바로 드래그하거나 저장합니다.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

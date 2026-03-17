@@ -5,6 +5,7 @@ import Foundation
 final class AppModel: ObservableObject {
     @Published private(set) var recordingState: RecordingState = .idle
     @Published private(set) var clips: [RecordingClip] = []
+    @Published private var clipThumbnails: [URL: NSImage] = [:]
     @Published var captureMode: CaptureMode = .display {
         didSet {
             syncSelectedSource()
@@ -23,8 +24,10 @@ final class AppModel: ObservableObject {
     private let permissionService: ScreenRecordingPermissionService
     private let sourceCatalog: ScreenCaptureSourceCatalog
     private let recordingCoordinator: RecordingCoordinator
+    private let thumbnailService = ClipThumbnailService()
     private let areaSelectionOverlayController = AreaSelectionOverlayController()
     private lazy var shelfController = ShelfWindowController()
+    private lazy var previewWindowController = ClipPreviewWindowController()
     private lazy var hotKeyManager: GlobalHotKeyManager = {
         let manager = GlobalHotKeyManager()
         manager.onActivate = { [weak self] in
@@ -241,6 +244,10 @@ final class AppModel: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([clip.fileURL])
     }
 
+    func openPreview(for clip: RecordingClip) {
+        previewWindowController.show(clip: clip)
+    }
+
     func saveClip(_ clip: RecordingClip) {
         let savePanel = NSSavePanel()
         savePanel.title = "녹화 저장"
@@ -269,6 +276,28 @@ final class AppModel: ObservableObject {
         lastErrorMessage = nil
     }
 
+    func thumbnail(for clip: RecordingClip) -> NSImage? {
+        clipThumbnails[clip.fileURL] ?? thumbnailService.cachedThumbnail(for: clip.fileURL)
+    }
+
+    func loadThumbnailIfNeeded(for clip: RecordingClip) async {
+        if clipThumbnails[clip.fileURL] != nil {
+            return
+        }
+
+        if let cachedThumbnail = thumbnailService.cachedThumbnail(for: clip.fileURL) {
+            clipThumbnails[clip.fileURL] = cachedThumbnail
+            return
+        }
+
+        if let thumbnail = await thumbnailService.loadThumbnail(
+            for: clip.fileURL,
+            maxSize: CGSize(width: 640, height: 360)
+        ) {
+            clipThumbnails[clip.fileURL] = thumbnail
+        }
+    }
+
     private var currentSourceLabel: String {
         switch captureMode {
         case .area:
@@ -293,6 +322,9 @@ final class AppModel: ObservableObject {
     }
 
     private func deleteTemporaryClipIfNeeded(_ clip: RecordingClip) {
+        clipThumbnails.removeValue(forKey: clip.fileURL)
+        thumbnailService.removeThumbnail(for: clip.fileURL)
+
         guard clip.isTemporary else {
             return
         }

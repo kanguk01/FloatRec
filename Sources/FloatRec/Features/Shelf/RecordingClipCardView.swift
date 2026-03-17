@@ -8,6 +8,8 @@ struct RecordingClipCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            ClipThumbnailView(clip: clip)
+
             HStack(alignment: .top, spacing: 12) {
                 Image(nsImage: fileIcon)
                     .resizable()
@@ -40,6 +42,10 @@ struct RecordingClipCardView: View {
             }
 
             HStack {
+                Button("미리보기") {
+                    appModel.openPreview(for: clip)
+                }
+
                 Button("저장") {
                     appModel.saveClip(clip)
                 }

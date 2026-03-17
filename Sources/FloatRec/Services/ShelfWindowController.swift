@@ -12,7 +12,7 @@ final class ShelfWindowController {
                 .environmentObject(model)
         )
 
-        let targetSize = NSSize(width: 360, height: min(520, CGFloat(max(model.clips.count, 1)) * 142 + 88))
+        let targetSize = NSSize(width: 360, height: min(640, CGFloat(max(model.clips.count, 1)) * 286 + 92))
         panel.setContentSize(targetSize)
         position(panel: panel)
         panel.orderFrontRegardless()
