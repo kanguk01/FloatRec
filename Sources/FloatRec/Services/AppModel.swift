@@ -111,26 +111,12 @@ final class AppModel: ObservableObject {
     }
 
     func refreshCaptureSourcesIfNeeded() async {
-        guard !permissionService.canAccess() else {
-            logger.info("initial source refresh starting with granted permission")
-            await refreshCaptureSources(force: false)
-            return
-        }
-
-        logger.info("initial source refresh skipped because preflight access is false")
+        await refreshCaptureSources(force: false)
     }
 
     func refreshCaptureSources(force: Bool) async {
         guard !isRefreshingSources else {
             logger.info("source refresh skipped because refresh is already running")
-            return
-        }
-
-        if !permissionService.canAccess() {
-            logger.info("source refresh blocked by missing screen recording permission force=\(force, privacy: .public)")
-            if force {
-                lastErrorMessage = permissionService.noAccessSourceRefreshMessage()
-            }
             return
         }
 
@@ -146,8 +132,16 @@ final class AppModel: ObservableObject {
             )
             syncSelectedSource()
         } catch {
-            logger.error("source refresh failed: \(error.localizedDescription, privacy: .public)")
-            lastErrorMessage = "캡처 소스 목록을 불러오지 못했습니다: \(error.localizedDescription)"
+            let preflightGranted = permissionService.canAccess()
+            logger.error(
+                "source refresh failed: preflightGranted=\(preflightGranted, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+            )
+
+            if preflightGranted {
+                lastErrorMessage = "캡처 소스 목록을 불러오지 못했습니다: \(error.localizedDescription)"
+            } else if force {
+                lastErrorMessage = permissionService.noAccessSourceRefreshMessage()
+            }
         }
     }
 
@@ -161,11 +155,16 @@ final class AppModel: ObservableObject {
         logger.info("recording start requested for mode=\(self.captureMode.title, privacy: .public)")
 
         let granted = await permissionService.ensureAccess()
-        guard granted else {
-            recordingState = .idle
-            logger.error("recording start blocked because permission request was denied")
-            lastErrorMessage = permissionService.deniedAccessMessage()
-            return
+        if !granted {
+            let operationalAccess = await hasOperationalScreenAccess()
+            guard operationalAccess else {
+                recordingState = .idle
+                logger.error("recording start blocked because permission request was denied")
+                lastErrorMessage = permissionService.deniedAccessMessage()
+                return
+            }
+
+            logger.info("recording start continuing because source access probe succeeded after denied permission request")
         }
 
         if displaySources.isEmpty && windowSources.isEmpty {
@@ -349,6 +348,21 @@ final class AppModel: ObservableObject {
             lastAreaSelectionDescription ?? "영역 선택"
         case .display, .window:
             selectedSourceOption?.sourceLabel ?? captureMode.title
+        }
+    }
+
+    private func hasOperationalScreenAccess() async -> Bool {
+        if permissionService.canAccess() {
+            return true
+        }
+
+        do {
+            _ = try await sourceCatalog.loadSnapshot()
+            logger.info("operational screen access probe succeeded despite preflight access being false")
+            return true
+        } catch {
+            logger.error("operational screen access probe failed: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 
