@@ -90,6 +90,14 @@ final class AppModel: ObservableObject {
         }
     }
 
+    var installRecommendationMessage: String? {
+        permissionService.runtimeInstallIssue()?.guidanceText
+    }
+
+    var shouldRecommendApplicationsInstall: Bool {
+        installRecommendationMessage != nil
+    }
+
     func toggleRecording() async {
         switch recordingState {
         case .idle:
@@ -115,7 +123,7 @@ final class AppModel: ObservableObject {
 
         if !permissionService.canAccess() {
             if force {
-                lastErrorMessage = "화면 녹화 권한을 허용한 뒤 캡처 소스를 불러올 수 있습니다."
+                lastErrorMessage = permissionService.noAccessSourceRefreshMessage()
             }
             return
         }
@@ -144,7 +152,7 @@ final class AppModel: ObservableObject {
         let granted = await permissionService.ensureAccess()
         guard granted else {
             recordingState = .idle
-            lastErrorMessage = "화면 녹화 권한이 필요합니다. 시스템 설정에서 FloatRec 접근을 허용해 주세요."
+            lastErrorMessage = permissionService.deniedAccessMessage()
             return
         }
 
@@ -277,6 +285,14 @@ final class AppModel: ObservableObject {
 
     func openScreenRecordingSettings() {
         permissionService.openSettings()
+    }
+
+    func openApplicationsFolder() {
+        permissionService.openApplicationsFolder()
+    }
+
+    func revealRunningApp() {
+        permissionService.revealRunningApp()
     }
 
     func openSettingsWindow() {

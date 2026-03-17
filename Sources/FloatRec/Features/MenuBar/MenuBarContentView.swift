@@ -114,6 +114,27 @@ struct MenuBarContentView: View {
                 Spacer()
             }
 
+            if let installMessage = appModel.installRecommendationMessage {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(installMessage)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+
+                    HStack {
+                        Button("응용 프로그램") {
+                            appModel.openApplicationsFolder()
+                        }
+
+                        Button("현재 앱 보기") {
+                            appModel.revealRunningApp()
+                        }
+                    }
+                    .font(.caption)
+                }
+                .padding(10)
+                .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            }
+
             Button {
                 Task {
                     await appModel.toggleRecording()
@@ -169,6 +190,12 @@ struct MenuBarContentView: View {
                     HStack {
                         Button("설정 열기") {
                             appModel.openScreenRecordingSettings()
+                        }
+
+                        if appModel.shouldRecommendApplicationsInstall {
+                            Button("응용 프로그램") {
+                                appModel.openApplicationsFolder()
+                            }
                         }
 
                         Button("닫기") {
