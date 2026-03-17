@@ -19,8 +19,8 @@ final class AppModel: ObservableObject {
     let hotKeyDisplayString = "⌘⇧9"
 
     private let permissionService: ScreenRecordingPermissionService
-    private let recordingService: DemoRecordingService
     private let sourceCatalog: ScreenCaptureSourceCatalog
+    private let recordingCoordinator: RecordingCoordinator
     private lazy var shelfController = ShelfWindowController()
     private lazy var hotKeyManager: GlobalHotKeyManager = {
         let manager = GlobalHotKeyManager()
@@ -35,12 +35,15 @@ final class AppModel: ObservableObject {
 
     init(
         permissionService: ScreenRecordingPermissionService = ScreenRecordingPermissionService(),
-        recordingService: DemoRecordingService = DemoRecordingService(),
+        demoRecordingService: DemoRecordingService = DemoRecordingService(),
         sourceCatalog: ScreenCaptureSourceCatalog = ScreenCaptureSourceCatalog()
     ) {
         self.permissionService = permissionService
-        self.recordingService = recordingService
         self.sourceCatalog = sourceCatalog
+        self.recordingCoordinator = RecordingCoordinator(
+            sourceCatalog: sourceCatalog,
+            demoRecordingService: demoRecordingService
+        )
         _ = hotKeyManager
     }
 
@@ -149,7 +152,11 @@ final class AppModel: ObservableObject {
         }
 
         do {
-            try await recordingService.startRecording(sourceLabel: currentSourceLabel)
+            try await recordingCoordinator.startRecording(
+                mode: captureMode,
+                selectedSourceID: selectedSourceID,
+                fallbackSourceLabel: currentSourceLabel
+            )
             recordingState = .recording(startedAt: .now)
         } catch {
             recordingState = .idle
@@ -165,7 +172,7 @@ final class AppModel: ObservableObject {
         recordingState = .processing
 
         do {
-            let artifact = try await recordingService.stopRecording()
+            let artifact = try await recordingCoordinator.stopRecording()
             let clip = RecordingClip(
                 fileURL: artifact.fileURL,
                 duration: artifact.duration,
