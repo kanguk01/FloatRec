@@ -84,6 +84,10 @@ final class RecordingCoordinator {
                 return liveArtifact
             }
 
+            guard liveArtifact.duration <= RecordingFeatureFlags.maxPostProcessingDuration else {
+                return liveArtifact
+            }
+
             do {
                 return try await processWithTimeout(
                     liveArtifact,
@@ -112,7 +116,7 @@ final class RecordingCoordinator {
                 )
             }
             group.addTask {
-                try await Task.sleep(for: .seconds(8))
+                try await Task.sleep(for: .seconds(4))
                 return artifact
             }
 

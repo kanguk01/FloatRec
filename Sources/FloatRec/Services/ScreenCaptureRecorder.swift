@@ -79,7 +79,7 @@ final class ScreenCaptureRecorder: NSObject {
                 // Fallback to stopCapture path if the recording output is already detached.
             }
 
-            try await stream.stopCapture()
+            try await stopCaptureWithTimeout(stream)
             try await waitForRecordingFinish(finishTask)
         } catch {
             recordingDidFinishContinuation = nil
@@ -98,9 +98,37 @@ final class ScreenCaptureRecorder: NSObject {
         )
     }
 
+    private func stopCaptureWithTimeout(_ stream: SCStream) async throws {
+        let stopTask = Task<Void, Error> {
+            try await stream.stopCapture()
+        }
+
+        let timeoutTask = Task<Void, Error> {
+            try await Task.sleep(for: .seconds(3))
+            throw RecordingServiceError.notRecording
+        }
+
+        defer {
+            stopTask.cancel()
+            timeoutTask.cancel()
+        }
+
+        do {
+            _ = try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask { try await stopTask.value }
+                group.addTask { try await timeoutTask.value }
+                let value: Void? = try await group.next()
+                group.cancelAll()
+                return value
+            }
+        } catch {
+            // Proceed with the partially finalized file instead of hanging forever.
+        }
+    }
+
     private func waitForRecordingFinish(_ finishTask: Task<Void, Error>) async throws {
         let timeoutTask = Task<Void, Error> {
-            try await Task.sleep(for: .seconds(5))
+            try await Task.sleep(for: .seconds(2))
             throw RecordingServiceError.writerSetupFailed
         }
 
