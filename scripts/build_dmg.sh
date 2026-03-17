@@ -13,6 +13,8 @@ RESOURCES_DIR="$CONTENTS_DIR/Resources"
 BIN_PATH="$(swift build -c release --package-path "$REPO_ROOT" --show-bin-path)"
 EXECUTABLE_PATH="$BIN_PATH/$APP_NAME"
 DMG_PATH="$DIST_DIR/$APP_NAME.dmg"
+SIGNING_IDENTITY="${FLOATREC_SIGNING_IDENTITY:-FloatRec Local Signer}"
+SIGNING_KEYCHAIN_PATH="${FLOATREC_SIGNING_KEYCHAIN_PATH:-$HOME/.floatrec-local-signing/FloatRecLocal.keychain-db}"
 
 rm -rf "$STAGE_DIR" "$DMG_PATH"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$DIST_DIR"
@@ -57,7 +59,11 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-codesign --force --deep --sign - "$APP_DIR"
+FLOATREC_SIGNING_IDENTITY="$SIGNING_IDENTITY" \
+FLOATREC_SIGNING_KEYCHAIN_PATH="$SIGNING_KEYCHAIN_PATH" \
+  "$REPO_ROOT/scripts/ensure_local_signing_identity.sh" >/dev/null
+
+codesign --force --deep --keychain "$SIGNING_KEYCHAIN_PATH" --sign "$SIGNING_IDENTITY" "$APP_DIR"
 codesign --verify --deep --strict "$APP_DIR"
 
 ln -s /Applications "$STAGE_DIR/Applications"
