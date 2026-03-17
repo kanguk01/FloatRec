@@ -117,30 +117,32 @@ actor AutoZoomProcessor {
         isClickHighlightEnabled: Bool
     ) -> CIImage {
         let sourceImage = request.sourceImage
+        let sourceExtent = sourceImage.extent
         let currentTime = request.compositionTime.seconds
         let baseImage: CIImage
+        let activeCropRect: CGRect?
 
         if isAutoZoomEnabled, cursorTrack.isUsableForAutoZoom {
-            let focusPoint = interpolatedPoint(at: currentTime, samples: cursorTrack.samples)
+            let focusPoint = cameraPoint(at: currentTime, samples: cursorTrack.samples)
             let zoomFactor = zoomFactor(at: currentTime, samples: cursorTrack.samples)
             let cropSize = CGSize(
-                width: renderSize.width / zoomFactor,
-                height: renderSize.height / zoomFactor
+                width: sourceExtent.width / zoomFactor,
+                height: sourceExtent.height / zoomFactor
             )
 
-            let focusX = sourceImage.extent.minX + sourceImage.extent.width * focusPoint.x
-            let focusY = sourceImage.extent.minY + sourceImage.extent.height * focusPoint.y
+            let focusX = sourceExtent.minX + sourceExtent.width * focusPoint.x
+            let focusY = sourceExtent.minY + sourceExtent.height * focusPoint.y
 
             let cropOrigin = CGPoint(
                 x: clamp(
                     focusX - cropSize.width / 2,
-                    min: sourceImage.extent.minX,
-                    max: sourceImage.extent.maxX - cropSize.width
+                    min: sourceExtent.minX,
+                    max: sourceExtent.maxX - cropSize.width
                 ),
                 y: clamp(
                     focusY - cropSize.height / 2,
-                    min: sourceImage.extent.minY,
-                    max: sourceImage.extent.maxY - cropSize.height
+                    min: sourceExtent.minY,
+                    max: sourceExtent.maxY - cropSize.height
                 )
             )
 
@@ -156,19 +158,43 @@ actor AutoZoomProcessor {
                 )
             )
             .cropped(to: CGRect(origin: .zero, size: renderSize))
+            activeCropRect = cropRect
         } else {
-            baseImage = sourceImage.cropped(to: CGRect(origin: .zero, size: renderSize))
+            let translated = sourceImage.transformed(
+                by: CGAffineTransform(translationX: -sourceExtent.minX, y: -sourceExtent.minY)
+            )
+            baseImage = translated.cropped(to: CGRect(origin: .zero, size: renderSize))
+            activeCropRect = nil
         }
 
         guard isClickHighlightEnabled, let rippleImage = rippleOverlay(
             at: currentTime,
             renderSize: renderSize,
+            sourceExtent: sourceExtent,
+            activeCropRect: activeCropRect,
             cursorTrack: cursorTrack
         ) else {
             return baseImage
         }
 
         return rippleImage.composited(over: baseImage)
+    }
+
+    private static func cameraPoint(at time: TimeInterval, samples: [CursorTrackSample]) -> CGPoint {
+        let current = interpolatedPoint(at: time, samples: samples)
+        let trailing1 = interpolatedPoint(at: max(time - 0.10, 0), samples: samples)
+        let trailing2 = interpolatedPoint(at: max(time - 0.22, 0), samples: samples)
+        let trailing3 = interpolatedPoint(at: max(time - 0.34, 0), samples: samples)
+
+        let smoothed = CGPoint(
+            x: current.x * 0.46 + trailing1.x * 0.27 + trailing2.x * 0.17 + trailing3.x * 0.10,
+            y: current.y * 0.46 + trailing1.y * 0.27 + trailing2.y * 0.17 + trailing3.y * 0.10
+        )
+
+        return CGPoint(
+            x: 0.5 + (smoothed.x - 0.5) * 0.78,
+            y: 0.5 + (smoothed.y - 0.5) * 0.78
+        )
     }
 
     private static func interpolatedPoint(at time: TimeInterval, samples: [CursorTrackSample]) -> CGPoint {
@@ -206,17 +232,16 @@ actor AutoZoomProcessor {
 
     private static func zoomFactor(at time: TimeInterval, samples: [CursorTrackSample]) -> CGFloat {
         guard samples.count >= 2 else {
-            return 1.4
+            return 1.18
         }
 
-        let window: TimeInterval = 0.28
         let current = interpolatedPoint(at: time, samples: samples)
-        let future = interpolatedPoint(at: min(time + window, samples.last?.time ?? time), samples: samples)
-        let dx = future.x - current.x
-        let dy = future.y - current.y
-        let speed = min(sqrt(dx * dx + dy * dy) * 8, 1)
+        let previous = interpolatedPoint(at: max(time - 0.18, 0), samples: samples)
+        let dx = current.x - previous.x
+        let dy = current.y - previous.y
+        let speed = min(sqrt(dx * dx + dy * dy) * 4.6, 1)
 
-        return 1.45 + speed * 0.45
+        return 1.18 + speed * 0.24
     }
 
     private static func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
@@ -226,6 +251,8 @@ actor AutoZoomProcessor {
     private static func rippleOverlay(
         at time: TimeInterval,
         renderSize: CGSize,
+        sourceExtent: CGRect,
+        activeCropRect: CGRect?,
         cursorTrack: CursorTrack
     ) -> CIImage? {
         let clickDuration: TimeInterval = 0.52
@@ -244,9 +271,21 @@ actor AutoZoomProcessor {
         for click in activeClicks {
             let age = time - click.time
             let progress = age / clickDuration
+            let sourcePoint = CGPoint(
+                x: sourceExtent.minX + sourceExtent.width * click.normalizedLocation.x,
+                y: sourceExtent.minY + sourceExtent.height * click.normalizedLocation.y
+            )
+
+            let projectedPoint = projectPoint(
+                sourcePoint,
+                sourceExtent: sourceExtent,
+                activeCropRect: activeCropRect,
+                renderSize: renderSize
+            )
+
             let center = CIVector(
-                x: renderSize.width * click.normalizedLocation.x,
-                y: renderSize.height * click.normalizedLocation.y
+                x: projectedPoint.x,
+                y: projectedPoint.y
             )
 
             let radius = 18 + 120 * progress
@@ -311,5 +350,21 @@ actor AutoZoomProcessor {
         filter.setValue(color0, forKey: "inputColor0")
         filter.setValue(color1, forKey: "inputColor1")
         return filter.outputImage
+    }
+
+    private static func projectPoint(
+        _ point: CGPoint,
+        sourceExtent: CGRect,
+        activeCropRect: CGRect?,
+        renderSize: CGSize
+    ) -> CGPoint {
+        let referenceRect = activeCropRect ?? sourceExtent
+        let x = (point.x - referenceRect.minX) * renderSize.width / referenceRect.width
+        let y = (point.y - referenceRect.minY) * renderSize.height / referenceRect.height
+
+        return CGPoint(
+            x: clamp(x, min: 0, max: renderSize.width),
+            y: clamp(y, min: 0, max: renderSize.height)
+        )
     }
 }

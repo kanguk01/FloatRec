@@ -28,7 +28,7 @@ final class CursorTrackingService {
                     self?.captureSample()
                 }
 
-                try? await Task.sleep(for: .milliseconds(33))
+                try? await Task.sleep(for: .milliseconds(16))
             }
         }
     }
@@ -56,14 +56,13 @@ final class CursorTrackingService {
         }
 
         let globalLocation = NSEvent.mouseLocation
-        let clampedPoint = CGPoint(
-            x: min(max(globalLocation.x, trackingRect.minX), trackingRect.maxX),
-            y: min(max(globalLocation.y, trackingRect.minY), trackingRect.maxY)
-        )
+        guard trackingRect.contains(globalLocation) else {
+            return
+        }
 
         let normalizedLocation = CGPoint(
-            x: (clampedPoint.x - trackingRect.minX) / trackingRect.width,
-            y: (clampedPoint.y - trackingRect.minY) / trackingRect.height
+            x: (globalLocation.x - trackingRect.minX) / trackingRect.width,
+            y: (globalLocation.y - trackingRect.minY) / trackingRect.height
         )
 
         let timestamp = ProcessInfo.processInfo.systemUptime - startedAt
@@ -73,7 +72,7 @@ final class CursorTrackingService {
             let dy = normalizedLocation.y - lastSample.normalizedLocation.y
             let distance = sqrt(dx * dx + dy * dy)
 
-            if distance < 0.002, timestamp - lastSample.time < 0.12 {
+            if distance < 0.0012, timestamp - lastSample.time < 0.05 {
                 return
             }
         }
