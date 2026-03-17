@@ -73,39 +73,57 @@ final class RecordingCoordinator {
             defer { self.liveRecorder = nil }
             let cursorTrack = cursorTrackingService.stopTracking()
             let artifact = try await recorder.stopRecording()
-            let liveArtifact = RecordingArtifact(
+            return RecordingArtifact(
                 fileURL: artifact.fileURL,
                 duration: artifact.duration,
                 sourceLabel: artifact.sourceLabel,
                 cursorTrack: cursorTrack
             )
-
-            guard isAutoZoomEnabled || isClickHighlightEnabled else {
-                return liveArtifact
-            }
-
-            guard liveArtifact.duration <= RecordingFeatureFlags.maxPostProcessingDuration else {
-                return liveArtifact
-            }
-
-            do {
-                return try await processWithTimeout(
-                    liveArtifact,
-                    isAutoZoomEnabled: isAutoZoomEnabled,
-                    isClickHighlightEnabled: isClickHighlightEnabled
-                )
-            } catch {
-                return liveArtifact
-            }
         }
 
         return try await demoRecordingService.stopRecording()
     }
 
+    func shouldProcessSynchronously(_ artifact: RecordingArtifact) -> Bool {
+        shouldPostProcess(artifact)
+            && artifact.duration <= RecordingFeatureFlags.synchronousPostProcessingDuration
+    }
+
+    func shouldProcessInBackground(_ artifact: RecordingArtifact) -> Bool {
+        shouldPostProcess(artifact)
+            && artifact.duration > RecordingFeatureFlags.synchronousPostProcessingDuration
+            && artifact.duration <= RecordingFeatureFlags.maxBackgroundPostProcessingDuration
+    }
+
+    func processRecordedArtifact(_ artifact: RecordingArtifact) async -> RecordingArtifact {
+        guard shouldPostProcess(artifact) else {
+            return artifact
+        }
+
+        let timeoutSeconds: Double
+        if shouldProcessSynchronously(artifact) {
+            timeoutSeconds = 4
+        } else {
+            timeoutSeconds = min(max(artifact.duration * 2.2, 12), 60)
+        }
+
+        do {
+            return try await processWithTimeout(
+                artifact,
+                isAutoZoomEnabled: isAutoZoomEnabled,
+                isClickHighlightEnabled: isClickHighlightEnabled,
+                timeout: .seconds(timeoutSeconds)
+            )
+        } catch {
+            return artifact
+        }
+    }
+
     private func processWithTimeout(
         _ artifact: RecordingArtifact,
         isAutoZoomEnabled: Bool,
-        isClickHighlightEnabled: Bool
+        isClickHighlightEnabled: Bool,
+        timeout: Duration
     ) async throws -> RecordingArtifact {
         try await withThrowingTaskGroup(of: RecordingArtifact.self) { group in
             group.addTask {
@@ -116,7 +134,7 @@ final class RecordingCoordinator {
                 )
             }
             group.addTask {
-                try await Task.sleep(for: .seconds(4))
+                try await Task.sleep(for: timeout)
                 return artifact
             }
 
@@ -124,5 +142,17 @@ final class RecordingCoordinator {
             group.cancelAll()
             return result
         }
+    }
+
+    private func shouldPostProcess(_ artifact: RecordingArtifact) -> Bool {
+        guard isAutoZoomEnabled || isClickHighlightEnabled else {
+            return false
+        }
+
+        guard let cursorTrack = artifact.cursorTrack else {
+            return false
+        }
+
+        return cursorTrack.isUsableForAutoZoom || cursorTrack.hasClicks
     }
 }

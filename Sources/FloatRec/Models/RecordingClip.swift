@@ -7,6 +7,7 @@ struct RecordingClip: Identifiable {
     let duration: TimeInterval
     let sourceLabel: String
     let isTemporary: Bool
+    let isPostProcessing: Bool
 
     init(
         id: UUID = UUID(),
@@ -14,7 +15,8 @@ struct RecordingClip: Identifiable {
         createdAt: Date = .now,
         duration: TimeInterval,
         sourceLabel: String,
-        isTemporary: Bool = true
+        isTemporary: Bool = true,
+        isPostProcessing: Bool = false
     ) {
         self.id = id
         self.fileURL = fileURL
@@ -22,6 +24,7 @@ struct RecordingClip: Identifiable {
         self.duration = duration
         self.sourceLabel = sourceLabel
         self.isTemporary = isTemporary
+        self.isPostProcessing = isPostProcessing
     }
 
     var title: String {

@@ -28,6 +28,7 @@ final class AppModel: ObservableObject {
     private let recordingCoordinator: RecordingCoordinator
     private let thumbnailService = ClipThumbnailService()
     private let areaSelectionOverlayController = AreaSelectionOverlayController()
+    private var postProcessingTasks: [UUID: Task<Void, Never>] = [:]
     private lazy var shelfController = ShelfWindowController()
     private lazy var settingsWindowController = SettingsWindowController()
     private lazy var hotKeyManager: GlobalHotKeyManager = {
@@ -222,15 +223,29 @@ final class AppModel: ObservableObject {
 
         do {
             let artifact = try await recordingCoordinator.stopRecording()
+            let finalArtifact: RecordingArtifact
+            let shouldProcessInBackground = recordingCoordinator.shouldProcessInBackground(artifact)
+
+            if recordingCoordinator.shouldProcessSynchronously(artifact) {
+                finalArtifact = await recordingCoordinator.processRecordedArtifact(artifact)
+            } else {
+                finalArtifact = artifact
+            }
+
             let clip = RecordingClip(
-                fileURL: artifact.fileURL,
-                duration: artifact.duration,
-                sourceLabel: artifact.sourceLabel
+                fileURL: finalArtifact.fileURL,
+                duration: finalArtifact.duration,
+                sourceLabel: finalArtifact.sourceLabel,
+                isPostProcessing: shouldProcessInBackground
             )
 
             clips.insert(clip, at: 0)
             recordingState = .idle
             showShelf()
+
+            if shouldProcessInBackground {
+                enqueuePostProcessing(for: clip, artifact: artifact)
+            }
         } catch {
             recordingState = .idle
             lastErrorMessage = error.localizedDescription
@@ -246,6 +261,8 @@ final class AppModel: ObservableObject {
     }
 
     func removeClip(_ clip: RecordingClip) {
+        postProcessingTasks[clip.id]?.cancel()
+        postProcessingTasks.removeValue(forKey: clip.id)
         clips.removeAll { $0.id == clip.id }
         deleteTemporaryClipIfNeeded(clip)
 
@@ -257,6 +274,8 @@ final class AppModel: ObservableObject {
     }
 
     func clearClips() {
+        postProcessingTasks.values.forEach { $0.cancel() }
+        postProcessingTasks.removeAll()
         let currentClips = clips
         clips.removeAll()
         currentClips.forEach(deleteTemporaryClipIfNeeded)
@@ -377,6 +396,56 @@ final class AppModel: ObservableObject {
             }
 
             selectedSourceID = currentSourceOptions.first?.id
+        }
+    }
+
+    private func enqueuePostProcessing(for clip: RecordingClip, artifact: RecordingArtifact) {
+        postProcessingTasks[clip.id]?.cancel()
+        postProcessingTasks[clip.id] = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            let processedArtifact = await self.recordingCoordinator.processRecordedArtifact(artifact)
+            guard !Task.isCancelled else {
+                return
+            }
+
+            self.finishPostProcessing(for: clip, processedArtifact: processedArtifact)
+        }
+    }
+
+    private func finishPostProcessing(for clip: RecordingClip, processedArtifact: RecordingArtifact) {
+        defer {
+            postProcessingTasks[clip.id] = nil
+        }
+
+        guard let index = clips.firstIndex(where: { $0.id == clip.id }) else {
+            return
+        }
+
+        let updatedClip = RecordingClip(
+            id: clip.id,
+            fileURL: processedArtifact.fileURL,
+            createdAt: clip.createdAt,
+            duration: processedArtifact.duration,
+            sourceLabel: processedArtifact.sourceLabel,
+            isTemporary: clip.isTemporary,
+            isPostProcessing: false
+        )
+
+        if clip.fileURL != updatedClip.fileURL {
+            clipThumbnails.removeValue(forKey: clip.fileURL)
+            thumbnailService.removeThumbnail(for: clip.fileURL)
+
+            if clip.isTemporary {
+                try? FileManager.default.removeItem(at: clip.fileURL)
+            }
+        }
+
+        clips[index] = updatedClip
+        Task {
+            await loadThumbnailIfNeeded(for: updatedClip)
         }
     }
 

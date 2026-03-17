@@ -4,5 +4,6 @@ struct RecordingFeatureFlags {
     var isAutoZoomEnabled = true
     var isClickHighlightEnabled = true
 
-    static let maxPostProcessingDuration: TimeInterval = 5
+    static let synchronousPostProcessingDuration: TimeInterval = 5
+    static let maxBackgroundPostProcessingDuration: TimeInterval = 90
 }

@@ -25,6 +25,14 @@ struct RecordingClipCardView: View {
                     Text(clip.subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if clip.isPostProcessing {
+                        Text("후처리 중")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(Color.orange.opacity(0.12), in: Capsule())
+                            .foregroundStyle(.orange)
+                    }
                     Text(clip.isTemporary ? "저장 전까지 임시 보관" : "저장됨")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
