@@ -24,6 +24,11 @@ swift build -c release --package-path "$REPO_ROOT"
 cp "$EXECUTABLE_PATH" "$MACOS_DIR/$APP_NAME"
 chmod +x "$MACOS_DIR/$APP_NAME"
 
+FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
+mkdir -p "$FRAMEWORKS_DIR"
+SPARKLE_SRC="$REPO_ROOT/Frameworks/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+cp -R "$SPARKLE_SRC" "$FRAMEWORKS_DIR/"
+
 cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -55,6 +60,12 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
   <string>FloatRec uses the microphone when you choose to capture voice narration.</string>
   <key>NSScreenCaptureUsageDescription</key>
   <string>FloatRec records the selected screen, window, or area to create shareable clips.</string>
+  <key>SUFeedURL</key>
+  <string>https://kanguk01.github.io/FloatRec/appcast.xml</string>
+  <key>SUPublicEDKey</key>
+  <string>FVXsi1mAJvPgsjUCmA9vJxk6A0Pio3uBEKGccH8HyXw=</string>
+  <key>SUEnableAutomaticChecks</key>
+  <true/>
 </dict>
 </plist>
 PLIST

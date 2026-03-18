@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo.svg" width="128" alt="FloatRec">
+
 # FloatRec
 
 **macOS 메뉴바 기반 스크린 레코더**

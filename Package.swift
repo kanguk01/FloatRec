@@ -15,7 +15,12 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "FloatRec"
+            name: "FloatRec",
+            dependencies: ["Sparkle"]
+        ),
+        .binaryTarget(
+            name: "Sparkle",
+            path: "Frameworks/Sparkle.xcframework"
         ),
         .testTarget(
             name: "FloatRecTests",
