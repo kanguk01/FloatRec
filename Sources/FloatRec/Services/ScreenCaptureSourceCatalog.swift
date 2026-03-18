@@ -5,11 +5,14 @@ import ScreenCaptureKit
 
 private enum SourceCatalogError: LocalizedError {
     case timedOut
+    case unavailable
 
     var errorDescription: String? {
         switch self {
         case .timedOut:
             "캡처 소스 목록을 불러오는 시간이 너무 오래 걸렸습니다. 다시 시도해 주세요."
+        case .unavailable:
+            "캡처 소스 목록을 불러오지 못했습니다."
         }
     }
 }
@@ -19,6 +22,22 @@ private final class ShareableContentBox: @unchecked Sendable {
 
     init(_ content: SCShareableContent) {
         self.content = content
+    }
+}
+
+private final class ContinuationGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var hasResumed = false
+
+    func run(_ action: () -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !hasResumed else {
+            return
+        }
+
+        hasResumed = true
+        action()
     }
 }
 
@@ -96,7 +115,7 @@ final class ScreenCaptureSourceCatalog {
     private let logger = Logger(subsystem: "dev.floatrec.app", category: "source-catalog")
     private var displaySourcesByID: [String: SCDisplay] = [:]
     private var windowSourcesByID: [String: SCWindow] = [:]
-    private let snapshotTimeout: Duration = .seconds(5)
+    private let snapshotTimeoutSeconds: TimeInterval = 5
 
     func loadSnapshot() async throws -> CaptureSourceSnapshot {
         logger.info("loading shareable content snapshot")
@@ -146,25 +165,33 @@ final class ScreenCaptureSourceCatalog {
     }
 
     private func loadShareableContentWithTimeout() async throws -> SCShareableContent {
-        try await withThrowingTaskGroup(of: ShareableContentBox.self) { group in
-            group.addTask {
-                let content = try await SCShareableContent.excludingDesktopWindows(
-                    false,
-                    onScreenWindowsOnly: true
-                )
-                return ShareableContentBox(content)
-            }
-            group.addTask { [snapshotTimeout] in
-                try await Task.sleep(for: snapshotTimeout)
-                throw SourceCatalogError.timedOut
+        let box = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ShareableContentBox, Error>) in
+            let gate = ContinuationGate()
+
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(
+                deadline: .now() + snapshotTimeoutSeconds,
+            ) {
+                gate.run {
+                    continuation.resume(throwing: SourceCatalogError.timedOut)
+                }
             }
 
-            let result = try await group.next() ?? {
-                throw SourceCatalogError.timedOut
-            }()
-            group.cancelAll()
-            return result.content
+            SCShareableContent.getExcludingDesktopWindows(
+                false,
+                onScreenWindowsOnly: true
+            ) { content, error in
+                gate.run {
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else if let content {
+                        continuation.resume(returning: ShareableContentBox(content))
+                    } else {
+                        continuation.resume(throwing: SourceCatalogError.unavailable)
+                    }
+                }
+            }
         }
+        return box.content
     }
 
     func resolveSource(mode: CaptureMode, selectedSourceID: String?) async throws -> ResolvedCaptureSource? {
