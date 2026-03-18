@@ -41,6 +41,17 @@ private enum ManualCameraState {
     case follow
 }
 
+private struct ManualCameraContext {
+    let currentState: ManualCameraState
+    let lastTransition: ManualCameraTransition?
+}
+
+private struct ManualCameraTransition {
+    let fromState: ManualCameraState
+    let toState: ManualCameraState
+    let startTime: TimeInterval
+}
+
 actor AutoZoomProcessor {
     func process(
         _ artifact: RecordingArtifact,
@@ -247,7 +258,43 @@ actor AutoZoomProcessor {
         at time: TimeInterval,
         cursorTrack: CursorTrack
     ) -> CameraFrameConfiguration {
-        switch manualCameraState(at: time, cursorTrack: cursorTrack) {
+        let context = manualCameraContext(at: time, cursorTrack: cursorTrack)
+        let targetConfiguration = manualCameraConfiguration(
+            for: context.currentState,
+            at: time,
+            cursorTrack: cursorTrack
+        )
+
+        guard let transition = context.lastTransition else {
+            return targetConfiguration
+        }
+
+        let transitionDuration = manualTransitionDuration(to: transition.toState)
+        let rawProgress = (time - transition.startTime) / transitionDuration
+        guard rawProgress > 0, rawProgress < 1 else {
+            return targetConfiguration
+        }
+
+        let fromConfiguration = manualCameraConfiguration(
+            for: transition.fromState,
+            at: transition.startTime,
+            cursorTrack: cursorTrack
+        )
+        let easedProgress = easeInOutCubic(rawProgress)
+
+        return interpolateCameraConfiguration(
+            from: fromConfiguration,
+            to: targetConfiguration,
+            progress: easedProgress
+        )
+    }
+
+    private static func manualCameraConfiguration(
+        for state: ManualCameraState,
+        at time: TimeInterval,
+        cursorTrack: CursorTrack
+    ) -> CameraFrameConfiguration {
+        switch state {
         case .overview:
             return .overview
         case let .spotlight(point):
@@ -267,34 +314,51 @@ actor AutoZoomProcessor {
         }
     }
 
-    private static func manualCameraState(
+    private static func manualCameraContext(
         at time: TimeInterval,
         cursorTrack: CursorTrack
-    ) -> ManualCameraState {
+    ) -> ManualCameraContext {
         var state: ManualCameraState = .overview
+        var lastTransition: ManualCameraTransition?
 
         for event in cursorTrack.cameraControlEvents where event.time <= time {
-            switch event.action {
-            case .toggleSpotlight:
-                switch state {
-                case .spotlight:
-                    state = .overview
-                case .overview, .follow:
-                    state = .spotlight(event.normalizedLocation ?? interpolatedPoint(at: event.time, samples: cursorTrack.samples))
-                }
-            case .toggleFollow:
-                switch state {
-                case .follow:
-                    state = .overview
-                case .overview, .spotlight:
-                    state = .follow
-                }
-            case .resetOverview:
-                state = .overview
-            }
+            let previousState = state
+            state = nextManualCameraState(from: state, event: event, cursorTrack: cursorTrack)
+            lastTransition = ManualCameraTransition(
+                fromState: previousState,
+                toState: state,
+                startTime: event.time
+            )
         }
 
-        return state
+        return ManualCameraContext(currentState: state, lastTransition: lastTransition)
+    }
+
+    private static func nextManualCameraState(
+        from state: ManualCameraState,
+        event: CameraControlEvent,
+        cursorTrack: CursorTrack
+    ) -> ManualCameraState {
+        switch event.action {
+        case .toggleSpotlight:
+            switch state {
+            case .spotlight:
+                return .overview
+            case .overview, .follow:
+                return .spotlight(
+                    event.normalizedLocation ?? interpolatedPoint(at: event.time, samples: cursorTrack.samples)
+                )
+            }
+        case .toggleFollow:
+            switch state {
+            case .follow:
+                return .overview
+            case .overview, .spotlight:
+                return .follow
+            }
+        case .resetOverview:
+            return .overview
+        }
     }
 
     private static func cameraPoint(at time: TimeInterval, samples: [CursorTrackSample]) -> CGPoint {
@@ -403,6 +467,49 @@ actor AutoZoomProcessor {
         let dx = lhs.x - rhs.x
         let dy = lhs.y - rhs.y
         return sqrt(dx * dx + dy * dy)
+    }
+
+    private static func manualTransitionDuration(to state: ManualCameraState) -> TimeInterval {
+        switch state {
+        case .overview:
+            0.24
+        case .spotlight, .follow:
+            0.32
+        }
+    }
+
+    private static func interpolateCameraConfiguration(
+        from: CameraFrameConfiguration,
+        to: CameraFrameConfiguration,
+        progress: Double
+    ) -> CameraFrameConfiguration {
+        let fromFocus = from.focusPoint ?? CGPoint(x: 0.5, y: 0.5)
+        let toFocus = to.focusPoint ?? CGPoint(x: 0.5, y: 0.5)
+        let x = interpolate(fromFocus.x, toFocus.x, progress)
+        let y = interpolate(fromFocus.y, toFocus.y, progress)
+        let zoom = interpolate(from.zoomFactor, to.zoomFactor, progress)
+
+        if zoom <= 1.001 {
+            return .overview
+        }
+
+        return CameraFrameConfiguration(
+            focusPoint: CGPoint(x: x, y: y),
+            zoomFactor: zoom
+        )
+    }
+
+    private static func interpolate(_ from: CGFloat, _ to: CGFloat, _ progress: Double) -> CGFloat {
+        from + (to - from) * CGFloat(progress)
+    }
+
+    private static func easeInOutCubic(_ progress: Double) -> Double {
+        if progress < 0.5 {
+            return 4 * progress * progress * progress
+        }
+
+        let adjusted = (-2 * progress) + 2
+        return 1 - (adjusted * adjusted * adjusted) / 2
     }
 
     private static func stabilizedManualPoint(_ point: CGPoint) -> CGPoint {
