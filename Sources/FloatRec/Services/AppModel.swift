@@ -310,11 +310,6 @@ final class AppModel: ObservableObject {
         shelfController.show(using: self)
     }
 
-    func handleMenuDismissed() {
-        logger.info("menu bar window disappeared, cancelling capture selections")
-        cancelCaptureSelections()
-    }
-
     func hideShelf() {
         shelfController.hide()
     }
@@ -472,8 +467,8 @@ final class AppModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.logger.info("application resigned active, cancelling capture selections")
-                self?.cancelCaptureSelections()
+                self?.logger.info("application resigned active, cancelling area selection")
+                self?.areaSelectionOverlayController.cancelSelection()
             }
         }
     }
