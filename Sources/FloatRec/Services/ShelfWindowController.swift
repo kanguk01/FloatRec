@@ -25,7 +25,7 @@ final class ShelfWindowController {
         )
 
         let clipCount = max(model.clips.count, 1)
-        let height = min(560, CGFloat(clipCount) * 220 + 70)
+        let height = min(640, CGFloat(clipCount) * 260 + 60)
         panel.setContentSize(NSSize(width: 340, height: height))
         position(panel: panel)
         panel.orderFrontRegardless()
