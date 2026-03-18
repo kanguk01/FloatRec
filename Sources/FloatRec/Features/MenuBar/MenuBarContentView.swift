@@ -16,11 +16,19 @@ struct MenuBarContentView: View {
 
                 Spacer()
 
-                Text(appModel.hotKeyDisplayString)
-                    .font(.system(.caption, design: .rounded, weight: .semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.thinMaterial, in: Capsule())
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(appModel.hotKeyDisplayString)
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.thinMaterial, in: Capsule())
+
+                    if appModel.recordingState.isRecording {
+                        Text(appModel.stopHotKeyDisplayString)
+                            .font(.system(.caption2, design: .rounded, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             VStack(alignment: .leading, spacing: 10) {

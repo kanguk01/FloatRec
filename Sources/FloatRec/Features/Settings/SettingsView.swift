@@ -9,7 +9,8 @@ struct SettingsView: View {
                 .font(.title3.weight(.semibold))
 
             VStack(alignment: .leading, spacing: 10) {
-                Label("녹화 시작/종료 단축키: \(appModel.hotKeyDisplayString)", systemImage: "keyboard")
+                Label("녹화 시작/토글 단축키: \(appModel.hotKeyDisplayString)", systemImage: "keyboard")
+                Label("녹화 종료 전용 단축키: \(appModel.stopHotKeyDisplayString)", systemImage: "stop.circle")
                 Label("녹화 종료 후 클립은 자동 저장하지 않고 임시 보관함에 유지", systemImage: "dock.rectangle")
                 Label("디스플레이/윈도우 소스 목록은 ScreenCaptureKit에서 읽어옵니다", systemImage: "display.2")
                 Label("자동 줌과 클릭 강조는 디스플레이/윈도우/영역 녹화에서 후처리로 적용합니다", systemImage: "scope")

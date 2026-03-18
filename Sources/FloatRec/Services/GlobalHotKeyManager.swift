@@ -1,37 +1,68 @@
 import Carbon
 import Foundation
 
+enum GlobalHotKeyAction: UInt32, CaseIterable {
+    case toggleRecording = 1
+    case stopRecording = 2
+
+    var displayString: String {
+        switch self {
+        case .toggleRecording:
+            "⌘⇧9"
+        case .stopRecording:
+            "⌘⇧0"
+        }
+    }
+
+    fileprivate var keyCode: UInt32 {
+        switch self {
+        case .toggleRecording:
+            UInt32(kVK_ANSI_9)
+        case .stopRecording:
+            UInt32(kVK_ANSI_0)
+        }
+    }
+}
+
 final class GlobalHotKeyManager {
-    var onActivate: (() -> Void)?
+    var onAction: ((GlobalHotKeyAction) -> Void)?
 
-    private var hotKeyRef: EventHotKeyRef?
+    private var hotKeyRefs: [GlobalHotKeyAction: EventHotKeyRef] = [:]
     private var eventHandler: EventHandlerRef?
-
-    private let hotKeyID = EventHotKeyID(signature: OSType(0x46524331), id: 1)
 
     func register() {
         if eventHandler == nil {
             installHandler()
         }
 
-        guard hotKeyRef == nil else {
+        guard hotKeyRefs.isEmpty else {
             return
         }
 
-        RegisterEventHotKey(
-            UInt32(kVK_ANSI_9),
-            UInt32(cmdKey | shiftKey),
-            hotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotKeyRef
-        )
+        for action in GlobalHotKeyAction.allCases {
+            var hotKeyRef: EventHotKeyRef?
+            let hotKeyID = EventHotKeyID(signature: OSType(0x46524331), id: action.rawValue)
+
+            RegisterEventHotKey(
+                action.keyCode,
+                UInt32(cmdKey | shiftKey),
+                hotKeyID,
+                GetApplicationEventTarget(),
+                0,
+                &hotKeyRef
+            )
+
+            if let hotKeyRef {
+                hotKeyRefs[action] = hotKeyRef
+            }
+        }
     }
 
     deinit {
-        if let hotKeyRef {
+        for hotKeyRef in hotKeyRefs.values {
             UnregisterEventHotKey(hotKeyRef)
         }
+        hotKeyRefs.removeAll()
 
         if let eventHandler {
             RemoveEventHandler(eventHandler)
@@ -46,13 +77,29 @@ final class GlobalHotKeyManager {
 
         InstallEventHandler(
             GetApplicationEventTarget(),
-            { _, _, userData in
-                guard let userData else {
+            { _, event, userData in
+                guard let userData, let event else {
+                    return noErr
+                }
+
+                var hotKeyID = EventHotKeyID()
+                let status = GetEventParameter(
+                    event,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &hotKeyID
+                )
+
+                guard status == noErr,
+                      let action = GlobalHotKeyAction(rawValue: hotKeyID.id) else {
                     return noErr
                 }
 
                 let manager = Unmanaged<GlobalHotKeyManager>.fromOpaque(userData).takeUnretainedValue()
-                manager.onActivate?()
+                manager.onAction?(action)
                 return noErr
             },
             1,

@@ -21,7 +21,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var lastAreaSelectionDescription: String?
     @Published var featureFlags = RecordingFeatureFlags()
 
-    let hotKeyDisplayString = "⌘⇧9"
+    let hotKeyDisplayString = GlobalHotKeyAction.toggleRecording.displayString
+    let stopHotKeyDisplayString = GlobalHotKeyAction.stopRecording.displayString
 
     private let permissionService: ScreenRecordingPermissionService
     private let sourceCatalog: ScreenCaptureSourceCatalog
@@ -47,9 +48,9 @@ final class AppModel: ObservableObject {
     private lazy var settingsWindowController = SettingsWindowController()
     private lazy var hotKeyManager: GlobalHotKeyManager = {
         let manager = GlobalHotKeyManager()
-        manager.onActivate = { [weak self] in
+        manager.onAction = { [weak self] action in
             Task { @MainActor [weak self] in
-                await self?.toggleRecording()
+                await self?.handleGlobalHotKey(action)
             }
         }
         manager.register()
@@ -133,6 +134,18 @@ final class AppModel: ObservableObject {
             await stopRecording()
         case .requestingPermission, .processing:
             break
+        }
+    }
+
+    func handleGlobalHotKey(_ action: GlobalHotKeyAction) async {
+        switch action {
+        case .toggleRecording:
+            await toggleRecording()
+        case .stopRecording:
+            guard recordingState.isRecording else {
+                return
+            }
+            await stopRecording()
         }
     }
 
