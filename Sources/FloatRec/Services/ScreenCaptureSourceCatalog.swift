@@ -115,18 +115,33 @@ final class ScreenCaptureSourceCatalog {
     private let logger = Logger(subsystem: "dev.floatrec.app", category: "source-catalog")
     private var displaySourcesByID: [String: SCDisplay] = [:]
     private var windowSourcesByID: [String: SCWindow] = [:]
+    private var cachedSnapshot: CaptureSourceSnapshot?
     private let snapshotTimeoutSeconds: TimeInterval = 5
 
-    func loadSnapshot() async throws -> CaptureSourceSnapshot {
+    func snapshotFromCache() -> CaptureSourceSnapshot? {
+        cachedSnapshot
+    }
+
+    func loadSnapshot(forceRefresh: Bool = false, fallbackToCache: Bool = true) async throws -> CaptureSourceSnapshot {
+        if !forceRefresh, let cachedSnapshot {
+            logger.info("reusing cached shareable content snapshot")
+            return cachedSnapshot
+        }
+
         logger.info("loading shareable content snapshot")
         let shareableContent: SCShareableContent
         do {
             shareableContent = try await loadShareableContentWithTimeout()
         } catch {
             logger.error("failed loading shareable content: \(error.localizedDescription, privacy: .public)")
+            if fallbackToCache, let cachedSnapshot {
+                logger.info("falling back to cached shareable content snapshot")
+                return cachedSnapshot
+            }
             throw error
         }
 
+        var displayMap: [String: SCDisplay] = [:]
         let displays = shareableContent.displays.enumerated().map { index, display in
             let option = CaptureSourceOption(
                 id: "display-\(display.displayID)",
@@ -134,10 +149,11 @@ final class ScreenCaptureSourceCatalog {
                 detail: "\(Int(display.width))×\(Int(display.height))",
                 sourceLabel: "디스플레이 \(index + 1)"
             )
-            displaySourcesByID[option.id] = display
+            displayMap[option.id] = display
             return option
         }
 
+        var windowMap: [String: SCWindow] = [:]
         let windows = shareableContent.windows.compactMap { window -> CaptureSourceOption? in
             let windowTitle = (window.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
             let appName = window.owningApplication?.applicationName ?? "앱 이름 없음"
@@ -150,18 +166,23 @@ final class ScreenCaptureSourceCatalog {
                 detail: "\(appName) · \(Int(size.width))×\(Int(size.height))",
                 sourceLabel: sourceLabel
             )
-            windowSourcesByID[option.id] = window
+            windowMap[option.id] = window
             return option
         }
         .sorted { lhs, rhs in
             lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
         }
 
+        displaySourcesByID = displayMap
+        windowSourcesByID = windowMap
+
         logger.info(
             "loaded shareable content snapshot: displays=\(displays.count, privacy: .public) windows=\(windows.count, privacy: .public)"
         )
 
-        return CaptureSourceSnapshot(displays: displays, windows: windows)
+        let snapshot = CaptureSourceSnapshot(displays: displays, windows: windows)
+        cachedSnapshot = snapshot
+        return snapshot
     }
 
     private func loadShareableContentWithTimeout() async throws -> SCShareableContent {

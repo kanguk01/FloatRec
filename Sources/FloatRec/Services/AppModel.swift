@@ -31,9 +31,7 @@ final class AppModel: ObservableObject {
     private lazy var captureTargetPickerController: CaptureTargetPickerController = {
         let controller = CaptureTargetPickerController()
         controller.onSelection = { [weak self] selection in
-            Task { @MainActor [weak self] in
-                await self?.applyCaptureTargetSelection(selection)
-            }
+            self?.applyCaptureTargetSelection(selection)
         }
         controller.onCancel = { [weak self] in
             self?.logger.info("content picker selection cancelled")
@@ -44,6 +42,7 @@ final class AppModel: ObservableObject {
         return controller
     }()
     private var postProcessingTasks: [UUID: Task<Void, Never>] = [:]
+    private var selectedSourceOverrides: [CaptureMode: CaptureSourceOption] = [:]
     private lazy var shelfController = ShelfWindowController()
     private lazy var settingsWindowController = SettingsWindowController()
     private lazy var hotKeyManager: GlobalHotKeyManager = {
@@ -92,10 +91,11 @@ final class AppModel: ObservableObject {
 
     var selectedSourceOption: CaptureSourceOption? {
         guard let selectedSourceID else {
-            return nil
+            return selectedSourceOverrides[captureMode]
         }
 
         return currentSourceOptions.first(where: { $0.id == selectedSourceID })
+            ?? selectedSourceOverrides[captureMode]
     }
 
     var captureSelectionSummary: String {
@@ -140,7 +140,11 @@ final class AppModel: ObservableObject {
             return
         }
 
-        await refreshCaptureSources(force: false)
+        guard let cachedSnapshot = sourceCatalog.snapshotFromCache() else {
+            return
+        }
+
+        applySnapshot(cachedSnapshot)
     }
 
     func refreshCaptureSources(force: Bool) async {
@@ -153,13 +157,11 @@ final class AppModel: ObservableObject {
         defer { isRefreshingSources = false }
 
         do {
-            let snapshot = try await sourceCatalog.loadSnapshot()
-            displaySources = snapshot.displays
-            windowSources = snapshot.windows
+            let snapshot = try await sourceCatalog.loadSnapshot(forceRefresh: force)
+            applySnapshot(snapshot)
             logger.info(
                 "source refresh succeeded: displays=\(snapshot.displays.count, privacy: .public) windows=\(snapshot.windows.count, privacy: .public)"
             )
-            syncSelectedSource()
         } catch {
             let preflightGranted = permissionService.canAccess()
             logger.error(
@@ -167,7 +169,9 @@ final class AppModel: ObservableObject {
             )
 
             if preflightGranted {
-                lastErrorMessage = "캡처 소스 목록을 불러오지 못했습니다: \(error.localizedDescription)"
+                if force || (displaySources.isEmpty && windowSources.isEmpty) {
+                    lastErrorMessage = "캡처 소스 목록을 불러오지 못했습니다: \(error.localizedDescription)"
+                }
             } else if force {
                 lastErrorMessage = permissionService.noAccessSourceRefreshMessage()
             }
@@ -182,6 +186,7 @@ final class AppModel: ObservableObject {
         lastErrorMessage = nil
         recordingState = .requestingPermission
         logger.info("recording start requested for mode=\(self.captureMode.title, privacy: .public)")
+        captureTargetPickerController.cancelPresentation()
 
         let granted = await permissionService.ensureAccess()
         if !granted {
@@ -196,7 +201,7 @@ final class AppModel: ObservableObject {
             logger.info("recording start continuing because source access probe succeeded after denied permission request")
         }
 
-        if displaySources.isEmpty && windowSources.isEmpty {
+        if captureMode != .area, selectedSourceID == nil, displaySources.isEmpty && windowSources.isEmpty {
             await refreshCaptureSources(force: false)
         }
 
@@ -291,11 +296,6 @@ final class AppModel: ObservableObject {
 
         guard !recordingState.isBusy else {
             lastErrorMessage = "준비 중이거나 후처리 중일 때는 캡처 대상을 바꿀 수 없습니다."
-            return
-        }
-
-        guard !isRefreshingSources else {
-            lastErrorMessage = "캡처 소스를 불러오는 중입니다. 잠시 뒤 다시 시도해 주세요."
             return
         }
 
@@ -448,7 +448,7 @@ final class AppModel: ObservableObject {
         }
 
         do {
-            _ = try await sourceCatalog.loadSnapshot()
+            _ = try await sourceCatalog.loadSnapshot(forceRefresh: true, fallbackToCache: false)
             logger.info("operational screen access probe succeeded despite preflight access being false")
             return true
         } catch {
@@ -462,19 +462,38 @@ final class AppModel: ObservableObject {
         case .area:
             selectedSourceID = nil
         case .display, .window:
-            if let selectedSourceID,
-               currentSourceOptions.contains(where: { $0.id == selectedSourceID }) {
+            if selectedSourceID != selectedSourceOverrides[captureMode]?.id {
+                selectedSourceID = selectedSourceOverrides[captureMode]?.id
+            }
+
+            guard let selectedSourceID else {
                 return
             }
 
-            selectedSourceID = nil
+            guard !currentSourceOptions.isEmpty else {
+                return
+            }
+
+            guard let matchedOption = currentSourceOptions.first(where: { $0.id == selectedSourceID }) else {
+                selectedSourceOverrides[captureMode] = nil
+                self.selectedSourceID = nil
+                return
+            }
+
+            selectedSourceOverrides[captureMode] = matchedOption
         }
     }
 
-    private func applyCaptureTargetSelection(_ selection: CaptureTargetPickerController.Selection) async {
+    private func applySnapshot(_ snapshot: CaptureSourceSnapshot) {
+        displaySources = snapshot.displays
+        windowSources = snapshot.windows
+        syncSelectedSource()
+    }
+
+    private func applyCaptureTargetSelection(_ selection: CaptureTargetPickerController.Selection) {
         captureMode = selection.mode
-        await refreshCaptureSources(force: false)
-        selectedSourceID = selection.sourceID
+        selectedSourceOverrides[selection.mode] = selection.source
+        selectedSourceID = selection.source.id
         lastErrorMessage = nil
     }
 

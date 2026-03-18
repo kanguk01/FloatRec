@@ -30,14 +30,14 @@ enum CaptureMode: String, CaseIterable, Identifiable {
     }
 }
 
-struct CaptureSourceOption: Identifiable, Hashable {
+struct CaptureSourceOption: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let detail: String
     let sourceLabel: String
 }
 
-struct CaptureSourceSnapshot {
+struct CaptureSourceSnapshot: Sendable {
     let displays: [CaptureSourceOption]
     let windows: [CaptureSourceOption]
 }

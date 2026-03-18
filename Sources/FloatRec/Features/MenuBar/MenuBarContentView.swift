@@ -33,7 +33,7 @@ struct MenuBarContentView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .disabled(appModel.recordingState.isBusy || appModel.isRefreshingSources)
+                .disabled(appModel.recordingState.isBusy)
 
                 Text(appModel.captureMode.helperText)
                     .font(.caption)
@@ -64,7 +64,7 @@ struct MenuBarContentView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(appModel.recordingState.isBusy || appModel.isRefreshingSources)
+                        .disabled(appModel.recordingState.isBusy)
 
                         HStack {
                             if let selectedSource = appModel.selectedSourceOption {
@@ -243,8 +243,5 @@ struct MenuBarContentView: View {
         }
         .padding(16)
         .frame(width: 320)
-        .task {
-            await appModel.refreshCaptureSourcesIfNeeded()
-        }
     }
 }
