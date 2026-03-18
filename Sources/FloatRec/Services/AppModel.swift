@@ -117,12 +117,7 @@ final class AppModel: ObservableObject {
     }
 
     var cameraControlSummary: String {
-        switch featureFlags.cameraControlStyle {
-        case .automatic:
-            "자동 추적으로 확대와 이동을 계산합니다."
-        case .manualHotkeys:
-            "녹화 중 ⌃1 반복 확대 · ⌃2 따라가기 · ⌃3 전체화면 · ⌃4 스포트라이트"
-        }
+        "녹화 중 ⌃1 반복 확대 · ⌃2 따라가기 · ⌃3 전체화면 · ⌃4 스포트라이트"
     }
 
     var shouldRecommendApplicationsInstall: Bool {

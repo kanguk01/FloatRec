@@ -73,13 +73,7 @@ actor AutoZoomProcessor {
             return artifact
         }
 
-        let shouldApplyCamera: Bool
-        switch cameraControlStyle {
-        case .automatic:
-            shouldApplyCamera = isAutoZoomEnabled && cursorTrack.isUsableForAutoZoom
-        case .manualHotkeys:
-            shouldApplyCamera = isAutoZoomEnabled && cursorTrack.hasManualCameraEvents
-        }
+        let shouldApplyCamera = isAutoZoomEnabled && cursorTrack.hasManualCameraEvents
 
         guard shouldApplyCamera || cursorTrack.hasClicks else {
             return artifact
@@ -269,23 +263,11 @@ actor AutoZoomProcessor {
             return .overview
         }
 
-        switch cameraControlStyle {
-        case .automatic:
-            guard cursorTrack.isUsableForAutoZoom else {
-                return .overview
-            }
-
-            return CameraFrameConfiguration(
-                focusPoint: cameraPoint(at: time, samples: cursorTrack.samples),
-                zoomFactor: zoomFactor(at: time, samples: cursorTrack.samples)
-            )
-        case .manualHotkeys:
-            return manualCameraConfiguration(
-                at: time,
-                cursorTrack: cursorTrack,
-                defaultManualSpotlightEnabled: defaultManualSpotlightEnabled
-            )
-        }
+        return manualCameraConfiguration(
+            at: time,
+            cursorTrack: cursorTrack,
+            defaultManualSpotlightEnabled: defaultManualSpotlightEnabled
+        )
     }
 
     private static func manualCameraConfiguration(
@@ -760,7 +742,7 @@ actor AutoZoomProcessor {
         defaultManualSpotlightEnabled: Bool,
         cameraControlStyle: CameraControlStyle
     ) -> String {
-        let cameraLabel = cameraControlStyle == .automatic ? "자동 줌" : "수동 카메라"
+        let cameraLabel = "수동 카메라"
 
         if isAutoZoomEnabled && isClickHighlightEnabled {
             return "\(base) · \(cameraLabel) · 클릭 강조"

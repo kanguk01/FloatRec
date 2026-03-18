@@ -12,7 +12,7 @@ final class RecordingCoordinator {
     private var isAutoZoomEnabled = true
     private var isClickHighlightEnabled = true
     private var defaultManualSpotlightEnabled = true
-    private var cameraControlStyle: CameraControlStyle = .automatic
+    private var cameraControlStyle: CameraControlStyle = .manualHotkeys
 
     init(
         sourceCatalog: ScreenCaptureSourceCatalog,
@@ -222,13 +222,7 @@ final class RecordingCoordinator {
             return false
         }
 
-        let shouldApplyCamera: Bool
-        switch cameraControlStyle {
-        case .automatic:
-            shouldApplyCamera = isAutoZoomEnabled && cursorTrack.isUsableForAutoZoom
-        case .manualHotkeys:
-            shouldApplyCamera = isAutoZoomEnabled && cursorTrack.hasManualCameraEvents
-        }
+        let shouldApplyCamera = isAutoZoomEnabled && cursorTrack.hasManualCameraEvents
 
         return shouldApplyCamera || cursorTrack.hasClicks
     }

@@ -134,20 +134,7 @@ struct MenuBarContentView: View {
                 .toggleStyle(.switch)
                 .disabled(appModel.recordingState.isRecording || appModel.recordingState.isBusy)
 
-                Picker("카메라 제어 방식", selection: $appModel.featureFlags.cameraControlStyle) {
-                    ForEach(CameraControlStyle.allCases) { style in
-                        Text(style.title).tag(style)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .disabled(
-                    !appModel.featureFlags.isAutoZoomEnabled
-                        || appModel.recordingState.isRecording
-                        || appModel.recordingState.isBusy
-                )
-
-                if appModel.featureFlags.cameraControlStyle == .manualHotkeys,
-                   appModel.featureFlags.isAutoZoomEnabled {
+                if appModel.featureFlags.isAutoZoomEnabled {
                     Toggle(isOn: $appModel.featureFlags.defaultManualSpotlightEnabled) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("기본 스포트라이트")
@@ -164,7 +151,7 @@ struct MenuBarContentView: View {
             HStack {
                 Label(
                     appModel.featureFlags.isAutoZoomEnabled
-                        ? (appModel.featureFlags.cameraControlStyle == .automatic ? "자동 줌 켜짐" : "수동 카메라 켜짐")
+                        ? "수동 카메라 켜짐"
                         : "카메라 후처리 꺼짐",
                     systemImage: "scope"
                 )
@@ -180,8 +167,7 @@ struct MenuBarContentView: View {
                         .foregroundStyle(.orange)
                 }
 
-                if appModel.featureFlags.cameraControlStyle == .manualHotkeys,
-                   appModel.featureFlags.isAutoZoomEnabled {
+                if appModel.featureFlags.isAutoZoomEnabled {
                     Text("⌃4 스포트라이트")
                         .font(.caption2)
                         .padding(.horizontal, 6)

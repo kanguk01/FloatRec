@@ -16,7 +16,7 @@ final class CursorTrackingService {
     private var samples: [CursorTrackSample] = []
     private var clickSamples: [CursorClickSample] = []
     private var cameraControlEvents: [CameraControlEvent] = []
-    private var cameraControlStyle: CameraControlStyle = .automatic
+    private var cameraControlStyle: CameraControlStyle = .manualHotkeys
     private var previewCameraState = PreviewCameraState.overview
 
     func startTracking(
@@ -72,7 +72,7 @@ final class CursorTrackingService {
             samples.removeAll()
             clickSamples.removeAll()
             cameraControlEvents.removeAll()
-            cameraControlStyle = .automatic
+            cameraControlStyle = .manualHotkeys
             previewCameraState = .overview
         }
 

@@ -44,7 +44,7 @@ struct RecordingFeatureFlags {
            let style = CameraControlStyle(rawValue: rawStyle) {
             cameraControlStyle = style
         } else {
-            cameraControlStyle = .automatic
+            cameraControlStyle = .manualHotkeys
         }
 
         if defaults.object(forKey: Self.spotlightKey) != nil {

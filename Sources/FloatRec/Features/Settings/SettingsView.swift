@@ -20,40 +20,30 @@ struct SettingsView: View {
             Toggle(isOn: $appModel.featureFlags.isAutoZoomEnabled) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("카메라 후처리")
-                    Text("자동 추적 또는 수동 키 제어로 확대/이동이 적용된 결과물을 만듭니다.")
+                    Text("수동 키 제어로 확대/이동이 적용된 결과물을 만듭니다.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             .toggleStyle(.switch)
 
-            Picker("카메라 제어 방식", selection: $appModel.featureFlags.cameraControlStyle) {
-                ForEach(CameraControlStyle.allCases) { style in
-                    Text(style.title).tag(style)
-                }
-            }
-            .pickerStyle(.segmented)
-            .disabled(!appModel.featureFlags.isAutoZoomEnabled)
-
             Text(appModel.cameraControlSummary)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if appModel.featureFlags.cameraControlStyle == .manualHotkeys {
-                Text("⌃1을 여러 번 눌러 1~4단계로 확대하고, 화면 상단 HUD로 현재 카메라 상태를 바로 알려줍니다.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            Text("⌃1을 여러 번 눌러 1~4단계로 확대하고, 화면 상단 HUD로 현재 카메라 상태를 바로 알려줍니다.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
 
-                Toggle(isOn: $appModel.featureFlags.defaultManualSpotlightEnabled) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("기본 스포트라이트")
-                        Text("수동 키 모드 녹화 시작 시 스포트라이트를 켠 상태로 시작합니다. 녹화 중에는 ⌃4로 바꿀 수 있습니다.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+            Toggle(isOn: $appModel.featureFlags.defaultManualSpotlightEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("기본 스포트라이트")
+                    Text("녹화 시작 시 스포트라이트를 켠 상태로 시작합니다. 녹화 중에는 ⌃4로 바꿀 수 있습니다.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .toggleStyle(.switch)
             }
+            .toggleStyle(.switch)
 
             Toggle(isOn: $appModel.featureFlags.isClickHighlightEnabled) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -70,7 +60,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("다음 단계")
                     .font(.headline)
-                Text("수동 카메라 키 흐름과 자동 추적 흐름을 더 자연스럽게 다듬는 작업이 다음 단계입니다.")
+                Text("수동 카메라 키 흐름을 더 자연스럽게 다듬는 작업이 다음 단계입니다.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
