@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ShelfContainerView: View {
     @EnvironmentObject private var appModel: AppModel
+    var onMinimize: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,21 +33,40 @@ struct ShelfContainerView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 8) {
             Text("녹화 클립")
                 .font(.system(size: 13, weight: .semibold))
+
+            Text("\(appModel.clips.count)")
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(.secondary)
 
             Spacer()
 
             Button {
-                appModel.clearClips()
+                onMinimize?()
             } label: {
-                Text("모두 지우기")
-                    .font(.system(size: 11))
+                Image(systemName: "minus")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .help("최소화")
+
+            Button {
+                appModel.clearClips()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
             .disabled(appModel.clips.isEmpty)
+            .help("모두 닫기")
         }
     }
 
