@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>FloatRec Updates</title>
+    <link>https://kanguk01.github.io/FloatRec/appcast.xml</link>
+    <language>ko</language>
+    <item>
+      <title>FloatRec v0.1.0</title>
+      <pubDate>수, 18  3월 2026 20:11:01 +0000</pubDate>
+      <sparkle:version>0.1.0</sparkle:version>
+      <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure
+        url="https://github.com/kanguk01/FloatRec/releases/download/v0.1.0/FloatRec.dmg"
+        type="application/octet-stream"
+        sparkle:edSignature="4jbDGJELts1pvzmx6IBFkicmcRylwzHTQQs30IVdsUZUJTXUEwyzy7wqQwFuXUgdRrk5UZmXokJtXzAX9BR3Ag=="
+        length="721856"
+      />
+    </item>
+  </channel>
+</rss>
