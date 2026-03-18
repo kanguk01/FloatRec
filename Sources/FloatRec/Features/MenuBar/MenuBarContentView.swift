@@ -2,7 +2,6 @@ import SwiftUI
 
 struct MenuBarContentView: View {
     @EnvironmentObject private var appModel: AppModel
-    @State private var hoveredSourceID: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -29,93 +28,6 @@ struct MenuBarContentView: View {
                             .font(.system(.caption2, design: .rounded, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("캡처 대상")
-                    .font(.subheadline.weight(.semibold))
-
-                Picker("캡처 모드", selection: $appModel.captureMode) {
-                    ForEach(CaptureMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .disabled(appModel.recordingState.isBusy)
-
-                Text(appModel.captureMode.helperText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if appModel.captureMode == .area {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(appModel.captureSelectionSummary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("녹화 시작 후 전체 화면에 오버레이가 뜨고, 드래그를 마치면 바로 녹화가 시작됩니다.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if appModel.currentSourceOptions.isEmpty && !appModel.isRefreshingSources {
-                            Text("소스를 불러오는 중...")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding(.vertical, 12)
-                                .onAppear {
-                                    Task {
-                                        await appModel.refreshCaptureSources(force: true)
-                                    }
-                                }
-                        } else {
-                            ForEach(appModel.currentSourceOptions) { option in
-                                sourceRow(option)
-                            }
-                        }
-
-                        if appModel.isRefreshingSources {
-                            HStack(spacing: 6) {
-                                ProgressView()
-                                    .controlSize(.mini)
-                                Text("소스 갱신 중...")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.vertical, 4)
-                        }
-
-                        Divider()
-
-                        HStack {
-                            Text("목록에서 대상을 선택한 뒤 녹화를 시작하세요.")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-
-                            Spacer()
-
-                            Button("새로고침") {
-                                Task {
-                                    await appModel.refreshCaptureSources(force: true)
-                                }
-                            }
-                            .font(.caption)
-                            .disabled(appModel.recordingState.isBusy || appModel.isRefreshingSources)
-                        }
-
-                        Text("단축키 녹화는 현재 선택된 대상을 바로 사용합니다.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
             }
 
@@ -183,12 +95,6 @@ struct MenuBarContentView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
-            if appModel.isRefreshingSources {
-                Text("캡처 소스를 다시 불러오는 중입니다.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
             if let installMessage = appModel.installRecommendationMessage {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(installMessage)
@@ -244,7 +150,7 @@ struct MenuBarContentView: View {
                     Text("최근 클립")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text(latestClip.title)
+                    Text(latestClip.sourceLabel)
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                     Text(latestClip.subtitle)
@@ -305,63 +211,5 @@ struct MenuBarContentView: View {
         }
         .padding(16)
         .frame(width: 320)
-        .onAppear {
-            Task {
-                await appModel.refreshCaptureSourcesIfNeeded()
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func sourceRow(_ option: CaptureSourceOption) -> some View {
-        let isSelected = appModel.selectedSourceID == option.id
-        let isHovered = hoveredSourceID == option.id
-
-        Button {
-            appModel.selectSource(option)
-        } label: {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(option.title)
-                        .font(.caption)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    if !option.detail.isEmpty {
-                        Text(option.detail)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer()
-
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.accentColor)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected
-                          ? Color.accentColor.opacity(0.12)
-                          : (isHovered ? Color.primary.opacity(0.06) : Color.clear))
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .disabled(appModel.recordingState.isBusy)
-        .onHover { hovering in
-            hoveredSourceID = hovering ? option.id : nil
-            if hovering {
-                appModel.highlightSource(option)
-            } else {
-                appModel.clearSourceHighlight()
-            }
-        }
     }
 }
