@@ -724,15 +724,48 @@ private final class CaptureSelectionOverlayView: NSView {
     private func handleWindowClick(at localPoint: CGPoint) {
         let globalPoint = localToGlobal(localPoint)
 
-        guard let (windowID, _) = topWindowAt(globalPoint: globalPoint) else {
+        guard let (windowID, windowRect) = topWindowAt(globalPoint: globalPoint) else {
             return
         }
 
-        guard let scWindow = scWindows.first(where: { $0.windowID == windowID }) else {
+        // windowID로 직접 매칭
+        if let scWindow = scWindows.first(where: { $0.windowID == windowID }) {
+            selectionHandler?(.window(scWindow))
             return
         }
 
+        // Electron 등 탭 전환 시 windowID가 바뀌므로 PID + 프레임으로 폴백 매칭
+        let windowInfos = windowInfoList()
+        guard let clickedInfo = windowInfos.first(where: {
+            ($0[kCGWindowNumber as String] as? CGWindowID) == windowID
+        }),
+            let ownerPID = clickedInfo[kCGWindowOwnerPID as String] as? Int32
+        else {
+            return
+        }
+
+        let scWindow = scWindows
+            .filter { $0.owningApplication?.processID == pid_t(ownerPID) }
+            .min(by: { a, b in
+                frameDifference(a.frame, windowRect) < frameDifference(b.frame, windowRect)
+            })
+
+        guard let scWindow else { return }
         selectionHandler?(.window(scWindow))
+    }
+
+    private func frameDifference(_ scFrame: CGRect, _ nsRect: NSRect) -> CGFloat {
+        let mainHeight = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height ?? 0
+        let scNSRect = CGRect(
+            x: scFrame.origin.x,
+            y: mainHeight - scFrame.origin.y - scFrame.height,
+            width: scFrame.width,
+            height: scFrame.height
+        )
+        return abs(scNSRect.origin.x - nsRect.origin.x)
+            + abs(scNSRect.origin.y - nsRect.origin.y)
+            + abs(scNSRect.width - nsRect.width)
+            + abs(scNSRect.height - nsRect.height)
     }
 
     func applyMode(_ newMode: SelectionMode) {
