@@ -29,6 +29,7 @@ enum CameraControlAction: String, Sendable {
     case stepZoom
     case toggleFollow
     case resetOverview
+    case toggleSpotlightEffect
 }
 
 struct CameraControlEvent: Sendable {

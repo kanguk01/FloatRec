@@ -50,6 +50,7 @@ private enum ManualCameraState {
 private struct ManualCameraContext {
     let currentState: ManualCameraState
     let lastTransition: ManualCameraTransition?
+    let isSpotlightEnabled: Bool
 }
 
 private struct ManualCameraTransition {
@@ -65,6 +66,7 @@ actor AutoZoomProcessor {
         _ artifact: RecordingArtifact,
         isAutoZoomEnabled: Bool,
         isClickHighlightEnabled: Bool,
+        defaultManualSpotlightEnabled: Bool,
         cameraControlStyle: CameraControlStyle
     ) async throws -> RecordingArtifact {
         guard let cursorTrack = artifact.cursorTrack else {
@@ -100,6 +102,7 @@ actor AutoZoomProcessor {
                 cursorTrack: cursorTrack,
                 isAutoZoomEnabled: isAutoZoomEnabled,
                 isClickHighlightEnabled: isClickHighlightEnabled,
+                defaultManualSpotlightEnabled: defaultManualSpotlightEnabled,
                 cameraControlStyle: cameraControlStyle
             )
             request.finish(with: outputImage, context: nil)
@@ -127,6 +130,7 @@ actor AutoZoomProcessor {
                 base: artifact.sourceLabel,
                 isAutoZoomEnabled: isAutoZoomEnabled,
                 isClickHighlightEnabled: isClickHighlightEnabled,
+                defaultManualSpotlightEnabled: defaultManualSpotlightEnabled,
                 cameraControlStyle: cameraControlStyle
             ),
             cursorTrack: cursorTrack
@@ -165,6 +169,7 @@ actor AutoZoomProcessor {
         cursorTrack: CursorTrack,
         isAutoZoomEnabled: Bool,
         isClickHighlightEnabled: Bool,
+        defaultManualSpotlightEnabled: Bool,
         cameraControlStyle: CameraControlStyle
     ) -> CIImage {
         let sourceImage = request.sourceImage
@@ -177,6 +182,7 @@ actor AutoZoomProcessor {
             at: currentTime,
             cursorTrack: cursorTrack,
             isAutoZoomEnabled: isAutoZoomEnabled,
+            defaultManualSpotlightEnabled: defaultManualSpotlightEnabled,
             cameraControlStyle: cameraControlStyle
         )
 
@@ -233,6 +239,7 @@ actor AutoZoomProcessor {
             activeCropRect: activeCropRect,
             cursorTrack: cursorTrack,
             cameraConfiguration: cameraConfiguration,
+            defaultManualSpotlightEnabled: defaultManualSpotlightEnabled,
             cameraControlStyle: cameraControlStyle
         ) {
             overlayImage = spotlightOverlay.composited(over: overlayImage)
@@ -255,6 +262,7 @@ actor AutoZoomProcessor {
         at time: TimeInterval,
         cursorTrack: CursorTrack,
         isAutoZoomEnabled: Bool,
+        defaultManualSpotlightEnabled: Bool,
         cameraControlStyle: CameraControlStyle
     ) -> CameraFrameConfiguration {
         guard isAutoZoomEnabled else {
@@ -272,15 +280,24 @@ actor AutoZoomProcessor {
                 zoomFactor: zoomFactor(at: time, samples: cursorTrack.samples)
             )
         case .manualHotkeys:
-            return manualCameraConfiguration(at: time, cursorTrack: cursorTrack)
+            return manualCameraConfiguration(
+                at: time,
+                cursorTrack: cursorTrack,
+                defaultManualSpotlightEnabled: defaultManualSpotlightEnabled
+            )
         }
     }
 
     private static func manualCameraConfiguration(
         at time: TimeInterval,
-        cursorTrack: CursorTrack
+        cursorTrack: CursorTrack,
+        defaultManualSpotlightEnabled: Bool
     ) -> CameraFrameConfiguration {
-        let context = manualCameraContext(at: time, cursorTrack: cursorTrack)
+        let context = manualCameraContext(
+            at: time,
+            cursorTrack: cursorTrack,
+            defaultManualSpotlightEnabled: defaultManualSpotlightEnabled
+        )
         let targetConfiguration = manualCameraConfiguration(
             for: context.currentState,
             at: time,
@@ -338,22 +355,33 @@ actor AutoZoomProcessor {
 
     private static func manualCameraContext(
         at time: TimeInterval,
-        cursorTrack: CursorTrack
+        cursorTrack: CursorTrack,
+        defaultManualSpotlightEnabled: Bool
     ) -> ManualCameraContext {
         var state: ManualCameraState = .overview
         var lastTransition: ManualCameraTransition?
+        var isSpotlightEnabled = defaultManualSpotlightEnabled
 
         for event in cursorTrack.cameraControlEvents where event.time <= time {
             let previousState = state
-            state = nextManualCameraState(from: state, event: event, cursorTrack: cursorTrack)
-            lastTransition = ManualCameraTransition(
-                fromState: previousState,
-                toState: state,
-                startTime: event.time
-            )
+            switch event.action {
+            case .toggleSpotlightEffect:
+                isSpotlightEnabled.toggle()
+            default:
+                state = nextManualCameraState(from: state, event: event, cursorTrack: cursorTrack)
+                lastTransition = ManualCameraTransition(
+                    fromState: previousState,
+                    toState: state,
+                    startTime: event.time
+                )
+            }
         }
 
-        return ManualCameraContext(currentState: state, lastTransition: lastTransition)
+        return ManualCameraContext(
+            currentState: state,
+            lastTransition: lastTransition,
+            isSpotlightEnabled: isSpotlightEnabled
+        )
     }
 
     private static func nextManualCameraState(
@@ -386,6 +414,8 @@ actor AutoZoomProcessor {
             }
         case .resetOverview:
             return .overview
+        case .toggleSpotlightEffect:
+            return state
         }
     }
 
@@ -559,12 +589,14 @@ actor AutoZoomProcessor {
         activeCropRect: CGRect?,
         cursorTrack: CursorTrack,
         cameraConfiguration: CameraFrameConfiguration,
+        defaultManualSpotlightEnabled: Bool,
         cameraControlStyle: CameraControlStyle
     ) -> CIImage? {
         guard let configuration = spotlightOverlayConfiguration(
             at: time,
             cursorTrack: cursorTrack,
             cameraConfiguration: cameraConfiguration,
+            defaultManualSpotlightEnabled: defaultManualSpotlightEnabled,
             cameraControlStyle: cameraControlStyle
         ) else {
             return nil
@@ -627,6 +659,7 @@ actor AutoZoomProcessor {
         at time: TimeInterval,
         cursorTrack: CursorTrack,
         cameraConfiguration: CameraFrameConfiguration,
+        defaultManualSpotlightEnabled: Bool,
         cameraControlStyle: CameraControlStyle
     ) -> SpotlightOverlayConfiguration? {
         guard cameraControlStyle == .manualHotkeys,
@@ -635,7 +668,14 @@ actor AutoZoomProcessor {
             return nil
         }
 
-        let context = manualCameraContext(at: time, cursorTrack: cursorTrack)
+        let context = manualCameraContext(
+            at: time,
+            cursorTrack: cursorTrack,
+            defaultManualSpotlightEnabled: defaultManualSpotlightEnabled
+        )
+        guard context.isSpotlightEnabled else {
+            return nil
+        }
         switch context.currentState {
         case let .spotlight(_, zoomStep):
             return SpotlightOverlayConfiguration(
@@ -723,14 +763,17 @@ actor AutoZoomProcessor {
         base: String,
         isAutoZoomEnabled: Bool,
         isClickHighlightEnabled: Bool,
+        defaultManualSpotlightEnabled: Bool,
         cameraControlStyle: CameraControlStyle
     ) -> String {
+        let cameraLabel = cameraControlStyle == .automatic ? "자동 줌" : "수동 카메라"
+
         if isAutoZoomEnabled && isClickHighlightEnabled {
-            return "\(base) · \(cameraControlStyle == .automatic ? "자동 줌" : "수동 카메라") · 클릭 강조"
+            return "\(base) · \(cameraLabel) · 클릭 강조"
         }
 
         if isAutoZoomEnabled {
-            return "\(base) · \(cameraControlStyle == .automatic ? "자동 줌" : "수동 카메라")"
+            return "\(base) · \(cameraLabel)"
         }
 
         if isClickHighlightEnabled {

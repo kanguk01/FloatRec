@@ -5,6 +5,7 @@ enum RecordingCameraHotKeyAction: UInt32, CaseIterable {
     case stepZoom = 1
     case toggleFollow = 2
     case resetOverview = 3
+    case toggleSpotlightEffect = 4
 
     var title: String {
         switch self {
@@ -14,6 +15,8 @@ enum RecordingCameraHotKeyAction: UInt32, CaseIterable {
             "커서 따라가기 토글"
         case .resetOverview:
             "전체 화면 복귀"
+        case .toggleSpotlightEffect:
+            "스포트라이트 토글"
         }
     }
 
@@ -25,6 +28,8 @@ enum RecordingCameraHotKeyAction: UInt32, CaseIterable {
             "⌃2"
         case .resetOverview:
             "⌃3"
+        case .toggleSpotlightEffect:
+            "⌃4"
         }
     }
 
@@ -36,6 +41,8 @@ enum RecordingCameraHotKeyAction: UInt32, CaseIterable {
             UInt32(kVK_ANSI_2)
         case .resetOverview:
             UInt32(kVK_ANSI_3)
+        case .toggleSpotlightEffect:
+            UInt32(kVK_ANSI_4)
         }
     }
 }

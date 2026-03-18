@@ -95,6 +95,48 @@ struct MenuBarContentView: View {
                 }
             }
 
+            VStack(alignment: .leading, spacing: 10) {
+                Text("카메라")
+                    .font(.subheadline.weight(.semibold))
+
+                Toggle(isOn: $appModel.featureFlags.isAutoZoomEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("카메라 후처리")
+                        Text("녹화 결과에 확대와 이동을 적용합니다.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .disabled(appModel.recordingState.isRecording || appModel.recordingState.isBusy)
+
+                Picker("카메라 제어 방식", selection: $appModel.featureFlags.cameraControlStyle) {
+                    ForEach(CameraControlStyle.allCases) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(
+                    !appModel.featureFlags.isAutoZoomEnabled
+                        || appModel.recordingState.isRecording
+                        || appModel.recordingState.isBusy
+                )
+
+                if appModel.featureFlags.cameraControlStyle == .manualHotkeys,
+                   appModel.featureFlags.isAutoZoomEnabled {
+                    Toggle(isOn: $appModel.featureFlags.defaultManualSpotlightEnabled) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("기본 스포트라이트")
+                            Text("녹화 시작 시 켜두고, 녹화 중에는 ⌃4로 바로 켜고 끕니다.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .disabled(appModel.recordingState.isRecording || appModel.recordingState.isBusy)
+                }
+            }
+
             HStack {
                 Label(
                     appModel.featureFlags.isAutoZoomEnabled
@@ -116,7 +158,7 @@ struct MenuBarContentView: View {
 
                 if appModel.featureFlags.cameraControlStyle == .manualHotkeys,
                    appModel.featureFlags.isAutoZoomEnabled {
-                    Text("스포트라이트")
+                    Text("⌃4 스포트라이트")
                         .font(.caption2)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)

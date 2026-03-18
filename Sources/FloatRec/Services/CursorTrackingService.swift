@@ -19,9 +19,19 @@ final class CursorTrackingService {
     private var cameraControlStyle: CameraControlStyle = .automatic
     private var previewCameraState = PreviewCameraState.overview
 
-    func startTracking(for source: ResolvedCaptureSource, enabled: Bool, cameraControlStyle: CameraControlStyle) {
+    func startTracking(
+        for source: ResolvedCaptureSource,
+        enabled: Bool,
+        cameraControlStyle: CameraControlStyle,
+        defaultManualSpotlightEnabled: Bool
+    ) {
         _ = stopTracking()
         self.cameraControlStyle = cameraControlStyle
+        self.previewCameraState = PreviewCameraState(
+            mode: .overview,
+            zoomStep: 0,
+            isSpotlightEnabled: defaultManualSpotlightEnabled
+        )
 
         guard enabled, let trackingRect = source.autoZoomTrackingRect, trackingRect.width > 0, trackingRect.height > 0 else {
             logger.info(
@@ -211,6 +221,8 @@ final class CursorTrackingService {
             .toggleFollow
         case .resetOverview:
             .resetOverview
+        case .toggleSpotlightEffect:
+            .toggleSpotlightEffect
         }
     }
 
@@ -228,7 +240,11 @@ final class CursorTrackingService {
             case .overview:
                 nextZoomStep = max(previewCameraState.zoomStep, 1)
             }
-            return PreviewCameraState(mode: .spotlight, zoomStep: nextZoomStep)
+            return PreviewCameraState(
+                mode: .spotlight,
+                zoomStep: nextZoomStep,
+                isSpotlightEnabled: previewCameraState.isSpotlightEnabled
+            )
         case .toggleFollow:
             switch previewCameraState.mode {
             case .follow:
@@ -236,11 +252,18 @@ final class CursorTrackingService {
             case .overview, .spotlight:
                 return PreviewCameraState(
                     mode: .follow,
-                    zoomStep: max(previewCameraState.zoomStep, 1)
+                    zoomStep: max(previewCameraState.zoomStep, 1),
+                    isSpotlightEnabled: previewCameraState.isSpotlightEnabled
                 )
             }
         case .resetOverview:
             return .overview
+        case .toggleSpotlightEffect:
+            return PreviewCameraState(
+                mode: previewCameraState.mode,
+                zoomStep: previewCameraState.zoomStep,
+                isSpotlightEnabled: !previewCameraState.isSpotlightEnabled
+            )
         }
     }
 
@@ -269,6 +292,11 @@ final class CursorTrackingService {
         case .resetOverview:
             title = "전체 화면 복귀"
             detail = "카메라를 기본 시야로 되돌립니다 · \(action.displayString)"
+        case .toggleSpotlightEffect:
+            title = state.isSpotlightEnabled ? "스포트라이트 켜짐" : "스포트라이트 꺼짐"
+            detail = state.isSpotlightEnabled
+                ? "집중 영역만 밝게 남겨 둡니다 · \(action.displayString)"
+                : "빛 강조 없이 카메라 이동만 유지합니다 · \(action.displayString)"
         }
 
         cameraHUDController.showState(
@@ -281,8 +309,9 @@ final class CursorTrackingService {
 private struct PreviewCameraState {
     let mode: PreviewCameraMode
     let zoomStep: Int
+    let isSpotlightEnabled: Bool
 
-    static let overview = PreviewCameraState(mode: .overview, zoomStep: 0)
+    static let overview = PreviewCameraState(mode: .overview, zoomStep: 0, isSpotlightEnabled: true)
 }
 
 private enum PreviewCameraMode {

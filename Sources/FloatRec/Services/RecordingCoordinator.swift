@@ -11,6 +11,7 @@ final class RecordingCoordinator {
     private var liveRecorder: AnyObject?
     private var isAutoZoomEnabled = true
     private var isClickHighlightEnabled = true
+    private var defaultManualSpotlightEnabled = true
     private var cameraControlStyle: CameraControlStyle = .automatic
 
     init(
@@ -31,11 +32,13 @@ final class RecordingCoordinator {
         areaSelection: AreaSelection?,
         isAutoZoomEnabled: Bool,
         isClickHighlightEnabled: Bool,
+        defaultManualSpotlightEnabled: Bool,
         cameraControlStyle: CameraControlStyle,
         fallbackSourceLabel: String
     ) async throws {
         self.isAutoZoomEnabled = isAutoZoomEnabled
         self.isClickHighlightEnabled = isClickHighlightEnabled
+        self.defaultManualSpotlightEnabled = defaultManualSpotlightEnabled
         self.cameraControlStyle = cameraControlStyle
         if #available(macOS 15.0, *) {
             let resolvedSource: ResolvedCaptureSource?
@@ -64,7 +67,8 @@ final class RecordingCoordinator {
                     cursorTrackingService.startTracking(
                         for: resolvedSource,
                         enabled: needsPostProcessing,
-                        cameraControlStyle: cameraControlStyle
+                        cameraControlStyle: cameraControlStyle,
+                        defaultManualSpotlightEnabled: defaultManualSpotlightEnabled
                     )
                     liveRecorder = recorder
                     return
@@ -133,6 +137,7 @@ final class RecordingCoordinator {
                 artifact,
                 isAutoZoomEnabled: isAutoZoomEnabled,
                 isClickHighlightEnabled: isClickHighlightEnabled,
+                defaultManualSpotlightEnabled: defaultManualSpotlightEnabled,
                 cameraControlStyle: cameraControlStyle,
                 timeout: .seconds(timeoutSeconds)
             )
@@ -149,6 +154,7 @@ final class RecordingCoordinator {
         _ artifact: RecordingArtifact,
         isAutoZoomEnabled: Bool,
         isClickHighlightEnabled: Bool,
+        defaultManualSpotlightEnabled: Bool,
         cameraControlStyle: CameraControlStyle,
         timeout: Duration
     ) async throws -> RecordingArtifact {
@@ -158,6 +164,7 @@ final class RecordingCoordinator {
                     artifact,
                     isAutoZoomEnabled: isAutoZoomEnabled,
                     isClickHighlightEnabled: isClickHighlightEnabled,
+                    defaultManualSpotlightEnabled: defaultManualSpotlightEnabled,
                     cameraControlStyle: cameraControlStyle
                 )
             }

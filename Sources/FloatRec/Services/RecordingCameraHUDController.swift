@@ -12,7 +12,7 @@ final class RecordingCameraHUDController {
     func showHint() {
         show(
             title: "수동 카메라 준비",
-            detail: "⌃1 반복 확대 · ⌃2 따라가기 · ⌃3 전체화면"
+            detail: "⌃1 반복 확대 · ⌃2 따라가기 · ⌃3 전체화면 · ⌃4 스포트라이트"
         )
     }
 
