@@ -44,6 +44,7 @@ final class AppModel: ObservableObject {
     }()
     private var postProcessingTasks: [UUID: Task<Void, Never>] = [:]
     private var selectedSourceOverrides: [CaptureMode: CaptureSourceOption] = [:]
+    private var selectedResolvedSources: [CaptureMode: ResolvedCaptureSource] = [:]
     private lazy var shelfController = ShelfWindowController()
     private lazy var settingsWindowController = SettingsWindowController()
     private lazy var hotKeyManager: GlobalHotKeyManager = {
@@ -98,6 +99,10 @@ final class AppModel: ObservableObject {
 
         return currentSourceOptions.first(where: { $0.id == selectedSourceID })
             ?? selectedSourceOverrides[captureMode]
+    }
+
+    private var selectedResolvedSource: ResolvedCaptureSource? {
+        selectedResolvedSources[captureMode]
     }
 
     var captureSelectionSummary: String {
@@ -231,7 +236,10 @@ final class AppModel: ObservableObject {
             logger.info("recording start continuing because source access probe succeeded after denied permission request")
         }
 
-        if captureMode != .area, displaySources.isEmpty && windowSources.isEmpty {
+        if captureMode != .area,
+           !shouldPromptForTargetSelection,
+           selectedResolvedSource == nil,
+           displaySources.isEmpty && windowSources.isEmpty {
             await refreshCaptureSources(force: false)
         }
 
@@ -281,6 +289,7 @@ final class AppModel: ObservableObject {
             try await recordingCoordinator.startRecording(
                 mode: captureMode,
                 selectedSourceID: selectedSourceID,
+                resolvedSourceOverride: selectedResolvedSource,
                 areaSelection: areaSelection,
                 isAutoZoomEnabled: featureFlags.isAutoZoomEnabled,
                 isClickHighlightEnabled: featureFlags.isClickHighlightEnabled,
@@ -552,6 +561,7 @@ final class AppModel: ObservableObject {
 
             guard let matchedOption = currentSourceOptions.first(where: { $0.id == selectedSourceID }) else {
                 selectedSourceOverrides[captureMode] = nil
+                selectedResolvedSources[captureMode] = nil
                 self.selectedSourceID = nil
                 return
             }
@@ -569,6 +579,7 @@ final class AppModel: ObservableObject {
     private func applyCaptureTargetSelection(_ selection: CaptureTargetPickerController.Selection) {
         captureMode = selection.mode
         selectedSourceOverrides[selection.mode] = selection.source
+        selectedResolvedSources[selection.mode] = selection.resolvedSource
         selectedSourceID = selection.source.id
         lastErrorMessage = nil
     }

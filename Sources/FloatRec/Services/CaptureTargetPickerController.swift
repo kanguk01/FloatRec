@@ -4,9 +4,10 @@ import AppKit
 
 @MainActor
 final class CaptureTargetPickerController: NSObject {
-    struct Selection: Sendable {
+    struct Selection: @unchecked Sendable {
         let mode: CaptureMode
         let source: CaptureSourceOption
+        let resolvedSource: ResolvedCaptureSource
     }
 
     var onSelection: ((Selection) -> Void)?
@@ -108,7 +109,8 @@ final class CaptureTargetPickerController: NSObject {
                     title: "디스플레이",
                     detail: "\(Int(display.width))×\(Int(display.height))",
                     sourceLabel: "디스플레이 녹화"
-                )
+                ),
+                resolvedSource: .display(display, sourceLabel: "디스플레이 녹화")
             )
         case .window:
             guard let window = filter.includedWindows.first else {
@@ -125,7 +127,8 @@ final class CaptureTargetPickerController: NSObject {
                     title: title,
                     detail: "\(appName) · \(Int(window.frame.width))×\(Int(window.frame.height))",
                     sourceLabel: sourceLabel
-                )
+                ),
+                resolvedSource: .window(window, sourceLabel: sourceLabel)
             )
         default:
             return nil

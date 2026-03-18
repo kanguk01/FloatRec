@@ -29,6 +29,7 @@ final class RecordingCoordinator {
     func startRecording(
         mode: CaptureMode,
         selectedSourceID: String?,
+        resolvedSourceOverride: ResolvedCaptureSource?,
         areaSelection: AreaSelection?,
         isAutoZoomEnabled: Bool,
         isClickHighlightEnabled: Bool,
@@ -45,6 +46,8 @@ final class RecordingCoordinator {
 
             if let areaSelection {
                 resolvedSource = try await sourceCatalog.resolveAreaSelection(areaSelection)
+            } else if let resolvedSourceOverride {
+                resolvedSource = resolvedSourceOverride
             } else {
                 resolvedSource = try await sourceCatalog.resolveSource(
                     mode: mode,
