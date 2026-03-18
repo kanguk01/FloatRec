@@ -146,7 +146,7 @@ actor AutoZoomProcessor {
                 )
             )
 
-            let cropRect = CGRect(origin: cropOrigin, size: cropSize).integral
+            let cropRect = CGRect(origin: cropOrigin, size: cropSize)
             let cropped = sourceImage.cropped(to: cropRect)
             let translated = cropped.transformed(
                 by: CGAffineTransform(translationX: -cropRect.minX, y: -cropRect.minY)
@@ -182,18 +182,19 @@ actor AutoZoomProcessor {
 
     private static func cameraPoint(at time: TimeInterval, samples: [CursorTrackSample]) -> CGPoint {
         let current = interpolatedPoint(at: time, samples: samples)
-        let trailing1 = interpolatedPoint(at: max(time - 0.10, 0), samples: samples)
-        let trailing2 = interpolatedPoint(at: max(time - 0.22, 0), samples: samples)
-        let trailing3 = interpolatedPoint(at: max(time - 0.34, 0), samples: samples)
+        let trailing1 = interpolatedPoint(at: max(time - 0.14, 0), samples: samples)
+        let trailing2 = interpolatedPoint(at: max(time - 0.30, 0), samples: samples)
+        let trailing3 = interpolatedPoint(at: max(time - 0.50, 0), samples: samples)
+        let trailing4 = interpolatedPoint(at: max(time - 0.74, 0), samples: samples)
 
         let smoothed = CGPoint(
-            x: current.x * 0.46 + trailing1.x * 0.27 + trailing2.x * 0.17 + trailing3.x * 0.10,
-            y: current.y * 0.46 + trailing1.y * 0.27 + trailing2.y * 0.17 + trailing3.y * 0.10
+            x: current.x * 0.22 + trailing1.x * 0.24 + trailing2.x * 0.24 + trailing3.x * 0.18 + trailing4.x * 0.12,
+            y: current.y * 0.22 + trailing1.y * 0.24 + trailing2.y * 0.24 + trailing3.y * 0.18 + trailing4.y * 0.12
         )
 
         return CGPoint(
-            x: 0.5 + (smoothed.x - 0.5) * 0.78,
-            y: 0.5 + (smoothed.y - 0.5) * 0.78
+            x: 0.5 + stabilizedOffset(smoothed.x - 0.5, deadZone: 0.032, response: 0.78, maxOffset: 0.30),
+            y: 0.5 + stabilizedOffset(smoothed.y - 0.5, deadZone: 0.028, response: 0.78, maxOffset: 0.28)
         )
     }
 
@@ -232,20 +233,43 @@ actor AutoZoomProcessor {
 
     private static func zoomFactor(at time: TimeInterval, samples: [CursorTrackSample]) -> CGFloat {
         guard samples.count >= 2 else {
-            return 1.18
+            return 1.12
         }
 
         let current = interpolatedPoint(at: time, samples: samples)
-        let previous = interpolatedPoint(at: max(time - 0.18, 0), samples: samples)
-        let dx = current.x - previous.x
-        let dy = current.y - previous.y
-        let speed = min(sqrt(dx * dx + dy * dy) * 4.6, 1)
+        let previous = interpolatedPoint(at: max(time - 0.24, 0), samples: samples)
+        let earlier = interpolatedPoint(at: max(time - 0.48, 0), samples: samples)
+        let motion = distance(current, previous)
+        let trend = distance(previous, earlier)
+        let speed = max((motion * 0.65 + trend * 0.35) - 0.008, 0)
 
-        return 1.18 + speed * 0.24
+        return 1.12 + min(speed * 3.4, 1) * 0.10
     }
 
     private static func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
         Swift.min(Swift.max(value, minimum), maximum)
+    }
+
+    private static func stabilizedOffset(
+        _ value: CGFloat,
+        deadZone: CGFloat,
+        response: CGFloat,
+        maxOffset: CGFloat
+    ) -> CGFloat {
+        let magnitude = abs(value)
+        guard magnitude > deadZone else {
+            return 0
+        }
+
+        let sign: CGFloat = value >= 0 ? 1 : -1
+        let adjusted = (magnitude - deadZone) * response
+        return sign * min(adjusted, maxOffset)
+    }
+
+    private static func distance(_ lhs: CGPoint, _ rhs: CGPoint) -> CGFloat {
+        let dx = lhs.x - rhs.x
+        let dy = lhs.y - rhs.y
+        return sqrt(dx * dx + dy * dy)
     }
 
     private static func rippleOverlay(
