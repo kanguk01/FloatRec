@@ -624,32 +624,12 @@ actor AutoZoomProcessor {
 
         if let shadow = radialGradient(
             center: center,
-            radius0: focusRadius * 0.55,
+            radius0: focusRadius * 0.82,
             radius1: focusRadius * 1.65,
-            color0: CIColor(red: 0, green: 0, blue: 0, alpha: 0.02),
-            color1: CIColor(red: 0.01, green: 0.02, blue: 0.03, alpha: configuration.followsCursor ? 0.42 : 0.34)
+            color0: CIColor.clear,
+            color1: CIColor(red: 0.01, green: 0.02, blue: 0.03, alpha: configuration.followsCursor ? 0.36 : 0.30)
         ) {
             overlay = shadow.cropped(to: extent).composited(over: overlay)
-        }
-
-        if let glow = radialGradient(
-            center: center,
-            radius0: 0,
-            radius1: focusRadius * 0.96,
-            color0: CIColor(red: 1.0, green: 0.97, blue: 0.90, alpha: 0.18),
-            color1: CIColor.clear
-        ) {
-            overlay = glow.cropped(to: extent).composited(over: overlay)
-        }
-
-        if let ring = radialGradient(
-            center: center,
-            radius0: focusRadius * 0.72,
-            radius1: focusRadius * 1.02,
-            color0: CIColor(red: 1.0, green: 0.90, blue: 0.55, alpha: 0.10),
-            color1: CIColor.clear
-        ) {
-            overlay = ring.cropped(to: extent).composited(over: overlay)
         }
 
         return overlay
@@ -663,7 +643,7 @@ actor AutoZoomProcessor {
         cameraControlStyle: CameraControlStyle
     ) -> SpotlightOverlayConfiguration? {
         guard cameraControlStyle == .manualHotkeys,
-              let focusPoint = cameraConfiguration.focusPoint,
+              cameraConfiguration.focusPoint != nil,
               cameraConfiguration.hasZoom else {
             return nil
         }
@@ -677,21 +657,35 @@ actor AutoZoomProcessor {
             return nil
         }
         switch context.currentState {
-        case let .spotlight(_, zoomStep):
+        case let .spotlight(point, zoomStep):
             return SpotlightOverlayConfiguration(
-                focusPoint: focusPoint,
+                focusPoint: stabilizedManualPoint(point),
                 zoomStep: zoomStep,
                 followsCursor: false
             )
         case let .follow(zoomStep):
             return SpotlightOverlayConfiguration(
-                focusPoint: focusPoint,
+                focusPoint: highlightFollowPoint(at: time, samples: cursorTrack.samples),
                 zoomStep: zoomStep,
                 followsCursor: true
             )
         case .overview:
             return nil
         }
+    }
+
+    private static func highlightFollowPoint(at time: TimeInterval, samples: [CursorTrackSample]) -> CGPoint {
+        let current = interpolatedPoint(at: time, samples: samples)
+        let trailing = interpolatedPoint(at: max(time - 0.03, 0), samples: samples)
+        let blended = CGPoint(
+            x: current.x * 0.82 + trailing.x * 0.18,
+            y: current.y * 0.82 + trailing.y * 0.18
+        )
+
+        return CGPoint(
+            x: clamp(blended.x, min: 0.06, max: 0.94),
+            y: clamp(blended.y, min: 0.06, max: 0.94)
+        )
     }
 
     private static func rippleOverlay(
