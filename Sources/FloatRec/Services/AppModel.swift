@@ -129,7 +129,7 @@ final class AppModel: ObservableObject {
     func toggleRecording() async {
         switch recordingState {
         case .idle:
-            await startRecording()
+            await startRecording(shouldPromptForTargetSelection: true)
         case .recording:
             await stopRecording()
         case .requestingPermission, .processing:
@@ -138,14 +138,30 @@ final class AppModel: ObservableObject {
     }
 
     func handleGlobalHotKey(_ action: GlobalHotKeyAction) async {
+        logger.info(
+            "received global hotkey action=\(String(describing: action), privacy: .public) state=\(self.recordingState.statusText, privacy: .public)"
+        )
+
         switch action {
         case .toggleRecording:
-            await toggleRecording()
+            switch recordingState {
+            case .idle:
+                let shouldPromptForTargetSelection = captureMode != .area && selectedSourceOption == nil
+                await startRecording(shouldPromptForTargetSelection: shouldPromptForTargetSelection)
+            case .recording:
+                await stopRecording()
+            case .requestingPermission, .processing:
+                break
+            }
         case .stopRecording:
-            guard recordingState.isRecording else {
+            switch recordingState {
+            case .recording:
+                await stopRecording()
+            case .requestingPermission:
+                cancelPendingCapturePreparation()
+            case .idle, .processing:
                 return
             }
-            await stopRecording()
         }
     }
 
@@ -192,7 +208,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func startRecording() async {
+    func startRecording(shouldPromptForTargetSelection: Bool) async {
         guard !recordingState.isBusy else {
             return
         }
@@ -219,7 +235,7 @@ final class AppModel: ObservableObject {
             await refreshCaptureSources(force: false)
         }
 
-        if captureMode != .area {
+        if captureMode != .area, shouldPromptForTargetSelection {
             do {
                 _ = try await captureTargetPickerController.selectTarget(for: captureMode)
             } catch PickerError.cancelled {
@@ -231,6 +247,10 @@ final class AppModel: ObservableObject {
                 lastErrorMessage = "캡처 대상을 선택하지 못했습니다: \(error.localizedDescription)"
                 return
             }
+        } else if captureMode != .area {
+            logger.info(
+                "recording start reusing current target selection for mode=\(self.captureMode.title, privacy: .public) selectedSourceID=\(self.selectedSourceID ?? "nil", privacy: .public)"
+            )
         }
 
         let areaSelection: AreaSelection?
@@ -504,6 +524,13 @@ final class AppModel: ObservableObject {
     private func cancelCaptureSelections() {
         captureTargetPickerController.cancelPresentation()
         areaSelectionOverlayController.cancelSelection()
+    }
+
+    private func cancelPendingCapturePreparation() {
+        logger.info("cancelling pending capture preparation")
+        cancelCaptureSelections()
+        recordingState = .idle
+        lastErrorMessage = nil
     }
 
     private func syncSelectedSource() {

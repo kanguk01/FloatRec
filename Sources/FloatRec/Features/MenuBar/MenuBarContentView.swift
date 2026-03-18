@@ -69,6 +69,10 @@ struct MenuBarContentView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
 
+                        Text("단축키 녹화는 현재 선택된 대상을 바로 사용합니다.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+
                         Button {
                             appModel.presentCaptureTargetPicker()
                         } label: {
