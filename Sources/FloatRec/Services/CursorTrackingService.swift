@@ -275,19 +275,20 @@ final class CursorTrackingService {
     }
 
     private func hudTitle(for state: PreviewCameraState) -> String {
+        let spotlightLabel = state.isSpotlightEnabled ? "스포트 ON" : "스포트 OFF"
+
         switch state.mode {
         case .overview:
-            return "수동 카메라 · 전체 화면"
+            return "전체 화면 · \(spotlightLabel)"
         case .spotlight:
-            return "수동 카메라 · 줌 \(state.zoomStep)단계"
+            return "줌 \(state.zoomStep)단계 · \(spotlightLabel)"
         case .follow:
-            return "수동 카메라 · 따라가기 \(state.zoomStep)단계"
+            return "따라가기 \(state.zoomStep)단계 · \(spotlightLabel)"
         }
     }
 
     private func hudDetail(for state: PreviewCameraState) -> String {
-        let spotlightLabel = state.isSpotlightEnabled ? "스포트라이트 켜짐" : "스포트라이트 꺼짐"
-        return "\(spotlightLabel) · ⌃1 확대 · ⌃2 따라가기 · ⌃3 전체화면 · ⌃4 스포트라이트"
+        return "⌃1 확대 · ⌃2 따라가기 · ⌃3 전체 · ⌃4 스포트"
     }
 }
 
