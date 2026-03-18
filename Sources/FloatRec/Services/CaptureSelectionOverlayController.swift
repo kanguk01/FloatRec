@@ -296,6 +296,8 @@ private final class CaptureSelectionOverlayView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     // MARK: - Coordinate Conversion
 
     /// CG 좌표계(좌상단 원점)를 AppKit 좌표계(좌하단 원점)로 변환
