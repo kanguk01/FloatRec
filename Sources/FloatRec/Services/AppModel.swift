@@ -67,6 +67,7 @@ final class AppModel: ObservableObject {
             sourceCatalog: sourceCatalog,
             demoRecordingService: demoRecordingService
         )
+        installLifecycleObservers()
         _ = hotKeyManager
     }
 
@@ -253,6 +254,7 @@ final class AppModel: ObservableObject {
             return
         }
 
+        cancelCaptureSelections()
         recordingState = .processing
 
         do {
@@ -306,6 +308,11 @@ final class AppModel: ObservableObject {
 
     func showShelf() {
         shelfController.show(using: self)
+    }
+
+    func handleMenuDismissed() {
+        logger.info("menu bar window disappeared, cancelling capture selections")
+        cancelCaptureSelections()
     }
 
     func hideShelf() {
@@ -455,6 +462,25 @@ final class AppModel: ObservableObject {
             logger.error("operational screen access probe failed: \(error.localizedDescription, privacy: .public)")
             return false
         }
+    }
+
+    private func installLifecycleObservers() {
+        let notificationCenter = NotificationCenter.default
+        _ = notificationCenter.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.logger.info("application resigned active, cancelling capture selections")
+                self?.cancelCaptureSelections()
+            }
+        }
+    }
+
+    private func cancelCaptureSelections() {
+        captureTargetPickerController.cancelPresentation()
+        areaSelectionOverlayController.cancelSelection()
     }
 
     private func syncSelectedSource() {
