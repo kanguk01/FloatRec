@@ -114,6 +114,16 @@ struct MenuBarContentView: View {
                         .foregroundStyle(.orange)
                 }
 
+                if appModel.featureFlags.cameraControlStyle == .manualHotkeys,
+                   appModel.featureFlags.isAutoZoomEnabled {
+                    Text("스포트라이트")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.yellow.opacity(0.12), in: Capsule())
+                        .foregroundStyle(.yellow)
+                }
+
                 Spacer()
             }
 

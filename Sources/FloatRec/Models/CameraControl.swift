@@ -26,7 +26,7 @@ enum CameraControlStyle: String, CaseIterable, Identifiable {
 }
 
 enum CameraControlAction: String, Sendable {
-    case toggleSpotlight
+    case stepZoom
     case toggleFollow
     case resetOverview
 }

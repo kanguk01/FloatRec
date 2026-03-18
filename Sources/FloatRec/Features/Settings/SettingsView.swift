@@ -39,7 +39,7 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
 
             if appModel.featureFlags.cameraControlStyle == .manualHotkeys {
-                Text("녹화가 시작되면 화면 상단 HUD로 현재 카메라 모드를 바로 알려줍니다.")
+                Text("⌃1을 여러 번 눌러 1~4단계로 확대하고, 화면 상단 HUD로 현재 카메라 상태를 바로 알려줍니다.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

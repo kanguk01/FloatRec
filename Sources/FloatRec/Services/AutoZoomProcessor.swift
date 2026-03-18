@@ -35,10 +35,16 @@ private struct CameraFrameConfiguration {
     }
 }
 
+private struct SpotlightOverlayConfiguration {
+    let focusPoint: CGPoint
+    let zoomStep: Int
+    let followsCursor: Bool
+}
+
 private enum ManualCameraState {
     case overview
-    case spotlight(CGPoint)
-    case follow
+    case spotlight(focusPoint: CGPoint, zoomStep: Int)
+    case follow(zoomStep: Int)
 }
 
 private struct ManualCameraContext {
@@ -53,6 +59,8 @@ private struct ManualCameraTransition {
 }
 
 actor AutoZoomProcessor {
+    private static let manualZoomFactors: [CGFloat] = [1.22, 1.4, 1.62, 1.86]
+
     func process(
         _ artifact: RecordingArtifact,
         isAutoZoomEnabled: Bool,
@@ -216,17 +224,31 @@ actor AutoZoomProcessor {
             activeCropRect = nil
         }
 
-        guard isClickHighlightEnabled, let rippleImage = rippleOverlay(
+        var overlayImage = CIImage.empty().cropped(to: CGRect(origin: .zero, size: renderSize))
+
+        if let spotlightOverlay = spotlightOverlay(
+            at: currentTime,
+            renderSize: renderSize,
+            sourceExtent: sourceExtent,
+            activeCropRect: activeCropRect,
+            cursorTrack: cursorTrack,
+            cameraConfiguration: cameraConfiguration,
+            cameraControlStyle: cameraControlStyle
+        ) {
+            overlayImage = spotlightOverlay.composited(over: overlayImage)
+        }
+
+        if isClickHighlightEnabled, let rippleImage = rippleOverlay(
             at: currentTime,
             renderSize: renderSize,
             sourceExtent: sourceExtent,
             activeCropRect: activeCropRect,
             cursorTrack: cursorTrack
-        ) else {
-            return baseImage
+        ) {
+            overlayImage = rippleImage.composited(over: overlayImage)
         }
 
-        return rippleImage.composited(over: baseImage)
+        return overlayImage.composited(over: baseImage)
     }
 
     private static func cameraConfiguration(
@@ -297,19 +319,19 @@ actor AutoZoomProcessor {
         switch state {
         case .overview:
             return .overview
-        case let .spotlight(point):
+        case let .spotlight(point, zoomStep):
             return CameraFrameConfiguration(
                 focusPoint: stabilizedManualPoint(point),
-                zoomFactor: 1.28
+                zoomFactor: manualZoomFactor(for: zoomStep)
             )
-        case .follow:
+        case let .follow(zoomStep):
             guard cursorTrack.isUsableForAutoZoom else {
                 return .overview
             }
 
             return CameraFrameConfiguration(
                 focusPoint: manualFollowPoint(at: time, samples: cursorTrack.samples),
-                zoomFactor: 1.18
+                zoomFactor: manualZoomFactor(for: zoomStep)
             )
         }
     }
@@ -340,21 +362,27 @@ actor AutoZoomProcessor {
         cursorTrack: CursorTrack
     ) -> ManualCameraState {
         switch event.action {
-        case .toggleSpotlight:
+        case .stepZoom:
+            let nextZoomStep: Int
             switch state {
-            case .spotlight:
-                return .overview
-            case .overview, .follow:
-                return .spotlight(
-                    event.normalizedLocation ?? interpolatedPoint(at: event.time, samples: cursorTrack.samples)
-                )
+            case let .spotlight(_, zoomStep), let .follow(zoomStep):
+                nextZoomStep = min(zoomStep + 1, manualZoomFactors.count)
+            case .overview:
+                nextZoomStep = 1
             }
+
+            return .spotlight(
+                focusPoint: event.normalizedLocation ?? interpolatedPoint(at: event.time, samples: cursorTrack.samples),
+                zoomStep: nextZoomStep
+            )
         case .toggleFollow:
             switch state {
             case .follow:
                 return .overview
-            case .overview, .spotlight:
-                return .follow
+            case .overview:
+                return .follow(zoomStep: 1)
+            case let .spotlight(_, zoomStep):
+                return .follow(zoomStep: zoomStep)
             }
         case .resetOverview:
             return .overview
@@ -472,10 +500,15 @@ actor AutoZoomProcessor {
     private static func manualTransitionDuration(to state: ManualCameraState) -> TimeInterval {
         switch state {
         case .overview:
-            0.24
-        case .spotlight, .follow:
-            0.32
+            0.22
+        case let .spotlight(_, zoomStep), let .follow(zoomStep):
+            0.26 + Double(zoomStep - 1) * 0.04
         }
+    }
+
+    private static func manualZoomFactor(for zoomStep: Int) -> CGFloat {
+        let index = max(min(zoomStep, manualZoomFactors.count), 1) - 1
+        return manualZoomFactors[index]
     }
 
     private static func interpolateCameraConfiguration(
@@ -517,6 +550,108 @@ actor AutoZoomProcessor {
             x: clamp(point.x, min: 0.14, max: 0.86),
             y: clamp(point.y, min: 0.14, max: 0.86)
         )
+    }
+
+    private static func spotlightOverlay(
+        at time: TimeInterval,
+        renderSize: CGSize,
+        sourceExtent: CGRect,
+        activeCropRect: CGRect?,
+        cursorTrack: CursorTrack,
+        cameraConfiguration: CameraFrameConfiguration,
+        cameraControlStyle: CameraControlStyle
+    ) -> CIImage? {
+        guard let configuration = spotlightOverlayConfiguration(
+            at: time,
+            cursorTrack: cursorTrack,
+            cameraConfiguration: cameraConfiguration,
+            cameraControlStyle: cameraControlStyle
+        ) else {
+            return nil
+        }
+
+        let sourcePoint = CGPoint(
+            x: sourceExtent.minX + sourceExtent.width * configuration.focusPoint.x,
+            y: sourceExtent.minY + sourceExtent.height * configuration.focusPoint.y
+        )
+        let projectedPoint = projectPoint(
+            sourcePoint,
+            sourceExtent: sourceExtent,
+            activeCropRect: activeCropRect,
+            renderSize: renderSize
+        )
+        let extent = CGRect(origin: .zero, size: renderSize)
+        let center = CIVector(x: projectedPoint.x, y: projectedPoint.y)
+        let baseRadius = min(renderSize.width, renderSize.height)
+        let focusRadius = max(
+            baseRadius * (configuration.followsCursor ? 0.17 : 0.2) - CGFloat(configuration.zoomStep - 1) * 16,
+            96
+        )
+
+        var overlay = CIImage.empty().cropped(to: extent)
+
+        if let shadow = radialGradient(
+            center: center,
+            radius0: focusRadius * 0.55,
+            radius1: focusRadius * 1.65,
+            color0: CIColor(red: 0, green: 0, blue: 0, alpha: 0.02),
+            color1: CIColor(red: 0.01, green: 0.02, blue: 0.03, alpha: configuration.followsCursor ? 0.42 : 0.34)
+        ) {
+            overlay = shadow.cropped(to: extent).composited(over: overlay)
+        }
+
+        if let glow = radialGradient(
+            center: center,
+            radius0: 0,
+            radius1: focusRadius * 0.96,
+            color0: CIColor(red: 1.0, green: 0.97, blue: 0.90, alpha: 0.18),
+            color1: CIColor.clear
+        ) {
+            overlay = glow.cropped(to: extent).composited(over: overlay)
+        }
+
+        if let ring = radialGradient(
+            center: center,
+            radius0: focusRadius * 0.72,
+            radius1: focusRadius * 1.02,
+            color0: CIColor(red: 1.0, green: 0.90, blue: 0.55, alpha: 0.10),
+            color1: CIColor.clear
+        ) {
+            overlay = ring.cropped(to: extent).composited(over: overlay)
+        }
+
+        return overlay
+    }
+
+    private static func spotlightOverlayConfiguration(
+        at time: TimeInterval,
+        cursorTrack: CursorTrack,
+        cameraConfiguration: CameraFrameConfiguration,
+        cameraControlStyle: CameraControlStyle
+    ) -> SpotlightOverlayConfiguration? {
+        guard cameraControlStyle == .manualHotkeys,
+              let focusPoint = cameraConfiguration.focusPoint,
+              cameraConfiguration.hasZoom else {
+            return nil
+        }
+
+        let context = manualCameraContext(at: time, cursorTrack: cursorTrack)
+        switch context.currentState {
+        case let .spotlight(_, zoomStep):
+            return SpotlightOverlayConfiguration(
+                focusPoint: focusPoint,
+                zoomStep: zoomStep,
+                followsCursor: false
+            )
+        case let .follow(zoomStep):
+            return SpotlightOverlayConfiguration(
+                focusPoint: focusPoint,
+                zoomStep: zoomStep,
+                followsCursor: true
+            )
+        case .overview:
+            return nil
+        }
     }
 
     private static func rippleOverlay(

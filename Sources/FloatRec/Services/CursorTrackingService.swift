@@ -4,6 +4,8 @@ import OSLog
 
 @MainActor
 final class CursorTrackingService {
+    private static let maxManualZoomStep = 4
+
     private let logger = Logger(subsystem: "dev.floatrec.app", category: "cursor-tracking")
     private let cameraHotKeyManager = RecordingCameraHotKeyManager()
     private let cameraHUDController = RecordingCameraHUDController()
@@ -15,7 +17,7 @@ final class CursorTrackingService {
     private var clickSamples: [CursorClickSample] = []
     private var cameraControlEvents: [CameraControlEvent] = []
     private var cameraControlStyle: CameraControlStyle = .automatic
-    private var previewCameraMode: PreviewCameraMode = .overview
+    private var previewCameraState = PreviewCameraState.overview
 
     func startTracking(for source: ResolvedCaptureSource, enabled: Bool, cameraControlStyle: CameraControlStyle) {
         _ = stopTracking()
@@ -61,7 +63,7 @@ final class CursorTrackingService {
             clickSamples.removeAll()
             cameraControlEvents.removeAll()
             cameraControlStyle = .automatic
-            previewCameraMode = .overview
+            previewCameraState = .overview
         }
 
         let result = CursorTrack(
@@ -182,8 +184,8 @@ final class CursorTrackingService {
             normalizedLocation: currentNormalizedLocation()
         )
         cameraControlEvents.append(actionEvent)
-        previewCameraMode = nextPreviewMode(for: action)
-        showCameraFeedback(for: action, mode: previewCameraMode)
+        previewCameraState = nextPreviewState(for: action)
+        showCameraFeedback(for: action, state: previewCameraState)
         logger.info(
             "captured camera control: action=\(actionEvent.action.rawValue, privacy: .public) time=\(timestamp, privacy: .public)"
         )
@@ -203,8 +205,8 @@ final class CursorTrackingService {
 
     private func cameraAction(for action: RecordingCameraHotKeyAction) -> CameraControlAction {
         switch action {
-        case .toggleSpotlight:
-            .toggleSpotlight
+        case .stepZoom:
+            .stepZoom
         case .toggleFollow:
             .toggleFollow
         case .resetOverview:
@@ -216,44 +218,50 @@ final class CursorTrackingService {
         "(\(Int(rect.minX)),\(Int(rect.minY))) \(Int(rect.width))x\(Int(rect.height))"
     }
 
-    private func nextPreviewMode(for action: RecordingCameraHotKeyAction) -> PreviewCameraMode {
+    private func nextPreviewState(for action: RecordingCameraHotKeyAction) -> PreviewCameraState {
         switch action {
-        case .toggleSpotlight:
-            switch previewCameraMode {
-            case .spotlight:
-                .overview
-            case .overview, .follow:
-                .spotlight
+        case .stepZoom:
+            let nextZoomStep: Int
+            switch previewCameraState.mode {
+            case .spotlight, .follow:
+                nextZoomStep = min(previewCameraState.zoomStep + 1, Self.maxManualZoomStep)
+            case .overview:
+                nextZoomStep = max(previewCameraState.zoomStep, 1)
             }
+            return PreviewCameraState(mode: .spotlight, zoomStep: nextZoomStep)
         case .toggleFollow:
-            switch previewCameraMode {
+            switch previewCameraState.mode {
             case .follow:
-                .overview
+                return .overview
             case .overview, .spotlight:
-                .follow
+                return PreviewCameraState(
+                    mode: .follow,
+                    zoomStep: max(previewCameraState.zoomStep, 1)
+                )
             }
         case .resetOverview:
-            .overview
+            return .overview
         }
     }
 
-    private func showCameraFeedback(for action: RecordingCameraHotKeyAction, mode: PreviewCameraMode) {
+    private func showCameraFeedback(for action: RecordingCameraHotKeyAction, state: PreviewCameraState) {
         let title: String
         let detail: String
 
         switch action {
-        case .toggleSpotlight:
-            if case .spotlight = mode {
-                title = "줌 켜짐"
-                detail = "현재 커서 위치로 부드럽게 확대합니다 · \(action.displayString)"
-            } else {
-                title = "줌 꺼짐"
-                detail = "전체 화면 보기로 돌아갑니다 · \(action.displayString)"
+        case .stepZoom:
+            switch state.mode {
+            case .spotlight:
+                title = "줌 \(state.zoomStep)단계"
+                detail = "현재 커서 위치를 더 가까이 봅니다 · \(action.displayString)"
+            case .overview, .follow:
+                title = "줌 조정"
+                detail = "현재 위치 확대 상태를 갱신합니다 · \(action.displayString)"
             }
         case .toggleFollow:
-            if case .follow = mode {
-                title = "따라가기 켜짐"
-                detail = "커서 이동을 계속 따라갑니다 · \(action.displayString)"
+            if case .follow = state.mode {
+                title = "따라가기 \(state.zoomStep)단계"
+                detail = "커서를 부드럽게 따라가며 확대를 유지합니다 · \(action.displayString)"
             } else {
                 title = "따라가기 꺼짐"
                 detail = "현재 카메라 추적을 멈춥니다 · \(action.displayString)"
@@ -268,6 +276,13 @@ final class CursorTrackingService {
             detail: detail
         )
     }
+}
+
+private struct PreviewCameraState {
+    let mode: PreviewCameraMode
+    let zoomStep: Int
+
+    static let overview = PreviewCameraState(mode: .overview, zoomStep: 0)
 }
 
 private enum PreviewCameraMode {

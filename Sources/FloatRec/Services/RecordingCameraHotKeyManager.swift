@@ -2,14 +2,14 @@ import Carbon
 import Foundation
 
 enum RecordingCameraHotKeyAction: UInt32, CaseIterable {
-    case toggleSpotlight = 1
+    case stepZoom = 1
     case toggleFollow = 2
     case resetOverview = 3
 
     var title: String {
         switch self {
-        case .toggleSpotlight:
-            "현재 위치 줌 토글"
+        case .stepZoom:
+            "현재 위치 확대"
         case .toggleFollow:
             "커서 따라가기 토글"
         case .resetOverview:
@@ -19,7 +19,7 @@ enum RecordingCameraHotKeyAction: UInt32, CaseIterable {
 
     var displayString: String {
         switch self {
-        case .toggleSpotlight:
+        case .stepZoom:
             "⌃1"
         case .toggleFollow:
             "⌃2"
@@ -30,7 +30,7 @@ enum RecordingCameraHotKeyAction: UInt32, CaseIterable {
 
     fileprivate var keyCode: UInt32 {
         switch self {
-        case .toggleSpotlight:
+        case .stepZoom:
             UInt32(kVK_ANSI_1)
         case .toggleFollow:
             UInt32(kVK_ANSI_2)
