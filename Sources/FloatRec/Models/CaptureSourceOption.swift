@@ -21,11 +21,11 @@ enum CaptureMode: String, CaseIterable, Identifiable {
     var helperText: String {
         switch self {
         case .display:
-            "화면 전체를 캡처합니다."
+            "녹화 시작을 누르면 디스플레이를 고르고 바로 녹화합니다."
         case .window:
-            "특정 앱 창만 캡처합니다."
+            "녹화 시작을 누르면 윈도우를 고르고 바로 녹화합니다."
         case .area:
-            "cmd+shift+5처럼 드래그로 영역을 선택해 녹화합니다."
+            "녹화 시작을 누르면 cmd+shift+5처럼 드래그로 영역을 선택합니다."
         }
     }
 }

@@ -65,10 +65,14 @@ struct MenuBarContentView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
+                        Text("녹화 시작을 누르면 선택기가 열리고, 클릭한 대상이 바로 녹화됩니다.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+
                         Button {
                             appModel.presentCaptureTargetPicker()
                         } label: {
-                            Label("화면에서 선택", systemImage: "cursorarrow.click")
+                            Label("미리 선택", systemImage: "cursorarrow.click")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)

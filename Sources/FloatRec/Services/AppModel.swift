@@ -215,15 +215,22 @@ final class AppModel: ObservableObject {
             logger.info("recording start continuing because source access probe succeeded after denied permission request")
         }
 
-        if captureMode != .area, selectedSourceID == nil, displaySources.isEmpty && windowSources.isEmpty {
+        if captureMode != .area, displaySources.isEmpty && windowSources.isEmpty {
             await refreshCaptureSources(force: false)
         }
 
-        guard captureMode == .area || selectedSourceOption != nil else {
-            recordingState = .idle
-            logger.error("recording start blocked because no source option is available")
-            lastErrorMessage = "선택한 캡처 모드에 사용할 대상이 없습니다."
-            return
+        if captureMode != .area {
+            do {
+                _ = try await captureTargetPickerController.selectTarget(for: captureMode)
+            } catch PickerError.cancelled {
+                recordingState = .idle
+                return
+            } catch {
+                recordingState = .idle
+                logger.error("recording start blocked because target selection failed: \(error.localizedDescription, privacy: .public)")
+                lastErrorMessage = "캡처 대상을 선택하지 못했습니다: \(error.localizedDescription)"
+                return
+            }
         }
 
         let areaSelection: AreaSelection?
@@ -241,6 +248,13 @@ final class AppModel: ObservableObject {
             }
         } else {
             areaSelection = nil
+        }
+
+        guard captureMode == .area || selectedSourceOption != nil else {
+            recordingState = .idle
+            logger.error("recording start blocked because no source option is available")
+            lastErrorMessage = "선택한 캡처 모드에 사용할 대상이 없습니다."
+            return
         }
 
         do {
