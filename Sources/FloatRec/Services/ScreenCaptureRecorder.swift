@@ -22,6 +22,7 @@ final class ScreenCaptureRecorder: NSObject {
     private var sourceLabel: String?
     private var recordingDidStartContinuation: CheckedContinuation<Void, Error>?
     private var recordingDidFinishContinuation: CheckedContinuation<Void, Error>?
+    private var pendingRecordingDidFinishResult: Result<Void, Error>?
 
     func start(source: ResolvedCaptureSource, showBuiltInClickHighlight: Bool) async throws {
         let filter = source.makeFilter()
@@ -67,6 +68,7 @@ final class ScreenCaptureRecorder: NSObject {
         self.stream = stream
         self.recordingOutput = recordingOutput
         self.sourceLabel = source.sourceLabel
+        self.pendingRecordingDidFinishResult = nil
 
         try stream.addRecordingOutput(recordingOutput)
 
@@ -91,12 +93,6 @@ final class ScreenCaptureRecorder: NSObject {
 
         let durationFallback = recordingOutput.recordedDuration.seconds
 
-        let finishTask = Task<Void, Error> {
-            try await withCheckedThrowingContinuation { continuation in
-                recordingDidFinishContinuation = continuation
-            }
-        }
-
         do {
             do {
                 try stream.removeRecordingOutput(recordingOutput)
@@ -105,15 +101,17 @@ final class ScreenCaptureRecorder: NSObject {
             }
 
             try await stopCaptureWithTimeout(stream)
-            try await waitForRecordingFinish(finishTask)
+            try await waitForRecordingFinish()
         } catch {
             recordingDidFinishContinuation = nil
+            pendingRecordingDidFinishResult = nil
             throw error
         }
 
         self.stream = nil
         self.recordingOutput = nil
         self.outputURL = nil
+        self.pendingRecordingDidFinishResult = nil
 
         return RecordingArtifact(
             fileURL: outputURL,
@@ -151,21 +149,14 @@ final class ScreenCaptureRecorder: NSObject {
         }
     }
 
-    private func waitForRecordingFinish(_ finishTask: Task<Void, Error>) async throws {
-        let timeoutTask = Task<Void, Error> {
-            try await Task.sleep(for: .seconds(2))
-            throw RecordingServiceError.writerSetupFailed
-        }
-
-        defer {
-            finishTask.cancel()
-            timeoutTask.cancel()
-        }
-
+    private func waitForRecordingFinish() async throws {
         do {
             _ = try await withThrowingTaskGroup(of: Void.self) { group in
-                group.addTask { try await finishTask.value }
-                group.addTask { try await timeoutTask.value }
+                group.addTask { try await self.awaitRecordingDidFinishSignal() }
+                group.addTask {
+                    try await Task.sleep(for: .seconds(2))
+                    throw RecordingServiceError.writerSetupFailed
+                }
                 let value: Void? = try await group.next()
                 group.cancelAll()
                 return value
@@ -173,6 +164,17 @@ final class ScreenCaptureRecorder: NSObject {
         } catch {
             // If the finish callback is missing, proceed with the file that was already written
             // instead of leaving the app stuck in the processing state forever.
+        }
+    }
+
+    private func awaitRecordingDidFinishSignal() async throws {
+        if let pendingRecordingDidFinishResult {
+            self.pendingRecordingDidFinishResult = nil
+            return try pendingRecordingDidFinishResult.get()
+        }
+
+        try await withCheckedThrowingContinuation { continuation in
+            recordingDidFinishContinuation = continuation
         }
     }
 
@@ -249,13 +251,26 @@ final class ScreenCaptureRecorder: NSObject {
     private func handleRecordingDidFail(_ error: Error) {
         recordingDidStartContinuation?.resume(throwing: error)
         recordingDidStartContinuation = nil
-        recordingDidFinishContinuation?.resume(throwing: error)
-        recordingDidFinishContinuation = nil
+        resolveRecordingDidFinish(with: .failure(error))
     }
 
     private func handleRecordingDidFinish() {
-        recordingDidFinishContinuation?.resume()
-        recordingDidFinishContinuation = nil
+        resolveRecordingDidFinish(with: .success(()))
+    }
+
+    private func resolveRecordingDidFinish(with result: Result<Void, Error>) {
+        if let recordingDidFinishContinuation {
+            self.recordingDidFinishContinuation = nil
+            switch result {
+            case .success:
+                recordingDidFinishContinuation.resume()
+            case let .failure(error):
+                recordingDidFinishContinuation.resume(throwing: error)
+            }
+            return
+        }
+
+        pendingRecordingDidFinishResult = result
     }
 
     private func frameRateDescription(for frameInterval: CMTime) -> Int {
