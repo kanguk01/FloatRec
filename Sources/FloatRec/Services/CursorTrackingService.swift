@@ -6,6 +6,7 @@ import OSLog
 final class CursorTrackingService {
     private let logger = Logger(subsystem: "dev.floatrec.app", category: "cursor-tracking")
     private let cameraHotKeyManager = RecordingCameraHotKeyManager()
+    private let cameraHUDController = RecordingCameraHUDController()
     private var trackingTask: Task<Void, Never>?
     private var globalMouseMonitor: Any?
     private var startedAt: TimeInterval?
@@ -14,6 +15,7 @@ final class CursorTrackingService {
     private var clickSamples: [CursorClickSample] = []
     private var cameraControlEvents: [CameraControlEvent] = []
     private var cameraControlStyle: CameraControlStyle = .automatic
+    private var previewCameraMode: PreviewCameraMode = .overview
 
     func startTracking(for source: ResolvedCaptureSource, enabled: Bool, cameraControlStyle: CameraControlStyle) {
         _ = stopTracking()
@@ -50,6 +52,7 @@ final class CursorTrackingService {
         trackingTask = nil
         removeGlobalMouseMonitor()
         removeCameraHotKeys()
+        cameraHUDController.hide()
 
         defer {
             startedAt = nil
@@ -58,6 +61,7 @@ final class CursorTrackingService {
             clickSamples.removeAll()
             cameraControlEvents.removeAll()
             cameraControlStyle = .automatic
+            previewCameraMode = .overview
         }
 
         let result = CursorTrack(
@@ -127,6 +131,7 @@ final class CursorTrackingService {
             }
         }
         cameraHotKeyManager.register()
+        cameraHUDController.showHint()
     }
 
     private func removeCameraHotKeys() {
@@ -177,6 +182,8 @@ final class CursorTrackingService {
             normalizedLocation: currentNormalizedLocation()
         )
         cameraControlEvents.append(actionEvent)
+        previewCameraMode = nextPreviewMode(for: action)
+        showCameraFeedback(for: action, mode: previewCameraMode)
         logger.info(
             "captured camera control: action=\(actionEvent.action.rawValue, privacy: .public) time=\(timestamp, privacy: .public)"
         )
@@ -208,4 +215,49 @@ final class CursorTrackingService {
     private func rectDescription(_ rect: CGRect) -> String {
         "(\(Int(rect.minX)),\(Int(rect.minY))) \(Int(rect.width))x\(Int(rect.height))"
     }
+
+    private func nextPreviewMode(for action: RecordingCameraHotKeyAction) -> PreviewCameraMode {
+        switch action {
+        case .toggleSpotlight:
+            switch previewCameraMode {
+            case .spotlight:
+                .overview
+            case .overview, .follow:
+                .spotlight
+            }
+        case .toggleFollow:
+            switch previewCameraMode {
+            case .follow:
+                .overview
+            case .overview, .spotlight:
+                .follow
+            }
+        case .resetOverview:
+            .overview
+        }
+    }
+
+    private func showCameraFeedback(for action: RecordingCameraHotKeyAction, mode: PreviewCameraMode) {
+        let title: String
+
+        switch mode {
+        case .overview:
+            title = "전체 화면"
+        case .spotlight:
+            title = "현재 위치 줌"
+        case .follow:
+            title = "커서 따라가기"
+        }
+
+        cameraHUDController.showState(
+            title: title,
+            detail: "단축키 \(action.displayString)"
+        )
+    }
+}
+
+private enum PreviewCameraMode {
+    case overview
+    case spotlight
+    case follow
 }

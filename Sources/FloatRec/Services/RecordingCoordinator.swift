@@ -56,15 +56,15 @@ final class RecordingCoordinator {
                     logger.info(
                         "start recording resolved source: mode=\(mode.title, privacy: .public) sourceLabel=\(resolvedSource.sourceLabel, privacy: .public) autoZoom=\(isAutoZoomEnabled, privacy: .public) clickHighlight=\(isClickHighlightEnabled, privacy: .public) cameraStyle=\(cameraControlStyle.rawValue, privacy: .public) trackingRectAvailable=\(resolvedSource.autoZoomTrackingRect != nil, privacy: .public)"
                     )
-                    cursorTrackingService.startTracking(
-                        for: resolvedSource,
-                        enabled: needsPostProcessing,
-                        cameraControlStyle: cameraControlStyle
-                    )
                     let useCustomClickHighlight = isClickHighlightEnabled && resolvedSource.autoZoomTrackingRect != nil
                     try await recorder.start(
                         source: resolvedSource,
                         showBuiltInClickHighlight: !useCustomClickHighlight
+                    )
+                    cursorTrackingService.startTracking(
+                        for: resolvedSource,
+                        enabled: needsPostProcessing,
+                        cameraControlStyle: cameraControlStyle
                     )
                     liveRecorder = recorder
                     return

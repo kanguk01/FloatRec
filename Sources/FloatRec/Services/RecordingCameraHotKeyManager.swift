@@ -20,11 +20,11 @@ enum RecordingCameraHotKeyAction: UInt32, CaseIterable {
     var displayString: String {
         switch self {
         case .toggleSpotlight:
-            "⌥⌘1"
+            "⌃1"
         case .toggleFollow:
-            "⌥⌘2"
+            "⌃2"
         case .resetOverview:
-            "⌥⌘0"
+            "⌃3"
         }
     }
 
@@ -35,7 +35,7 @@ enum RecordingCameraHotKeyAction: UInt32, CaseIterable {
         case .toggleFollow:
             UInt32(kVK_ANSI_2)
         case .resetOverview:
-            UInt32(kVK_ANSI_0)
+            UInt32(kVK_ANSI_3)
         }
     }
 }
@@ -60,7 +60,7 @@ final class RecordingCameraHotKeyManager {
             let hotKeyID = EventHotKeyID(signature: OSType(0x46524343), id: action.rawValue)
             RegisterEventHotKey(
                 action.keyCode,
-                UInt32(optionKey | cmdKey),
+                UInt32(controlKey),
                 hotKeyID,
                 GetApplicationEventTarget(),
                 0,

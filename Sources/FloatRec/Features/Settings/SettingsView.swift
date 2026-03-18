@@ -38,6 +38,12 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            if appModel.featureFlags.cameraControlStyle == .manualHotkeys {
+                Text("녹화가 시작되면 화면 상단 HUD로 현재 카메라 모드를 바로 알려줍니다.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
             Toggle(isOn: $appModel.featureFlags.isClickHighlightEnabled) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("클릭 리플 강조")
