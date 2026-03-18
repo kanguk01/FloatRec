@@ -3,140 +3,103 @@ import SwiftUI
 
 struct RecordingClipCardView: View {
     @EnvironmentObject private var appModel: AppModel
+    @State private var isHovered = false
 
     let clip: RecordingClip
 
     var body: some View {
-        let cardBody = VStack(alignment: .leading, spacing: 14) {
+        let card = VStack(alignment: .leading, spacing: 0) {
             ClipThumbnailView(clip: clip)
 
-            HStack(alignment: .top, spacing: 12) {
-                Image(nsImage: fileIcon)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 40, height: 40)
-                    .padding(10)
-                    .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(clip.sourceLabel)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(clip.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                    Text(clip.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text(clip.formattedDuration)
                     if clip.isPostProcessing {
-                        Text("후처리 중")
-                            .font(.caption2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(Color.orange.opacity(0.12), in: Capsule())
-                            .foregroundStyle(.orange)
+                        Text("·")
+                        HStack(spacing: 3) {
+                            ProgressView()
+                                .controlSize(.mini)
+                            Text("처리 중")
+                        }
+                        .foregroundStyle(.orange)
                     }
-                    Text(clip.isTemporary ? "저장 전까지 임시 보관" : "저장됨")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
-
-                Spacer()
-
-                Button {
-                    appModel.removeClip(clip)
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
 
-            HStack {
-                Button("미리보기") {
-                    appModel.openPreview(for: clip)
-                }
-                .disabled(clip.isPostProcessing)
+            if !clip.isPostProcessing {
+                Divider()
+                    .padding(.horizontal, 10)
 
-                Button("복사") {
-                    appModel.copyClipToPasteboard(clip)
-                }
-                .disabled(clip.isPostProcessing)
+                HStack(spacing: 2) {
+                    actionButton("저장", icon: "arrow.down.circle") {
+                        appModel.saveClip(clip)
+                    }
+                    actionButton("복사", icon: "doc.on.doc") {
+                        appModel.copyClipToPasteboard(clip)
+                    }
+                    actionButton("Finder", icon: "folder") {
+                        appModel.revealClipInFinder(clip)
+                    }
 
-                Button("저장") {
-                    appModel.saveClip(clip)
-                }
-                .disabled(clip.isPostProcessing)
+                    Spacer()
 
-                ShareLink(item: clip.fileURL) {
-                    Label("공유", systemImage: "square.and.arrow.up")
-                }
-                .buttonStyle(.borderless)
-                .disabled(clip.isPostProcessing)
-
-                Button("Finder") {
-                    appModel.revealClipInFinder(clip)
-                }
-                .disabled(clip.isPostProcessing)
-
-                Spacer()
-
-                Text(clip.isPostProcessing ? "후처리 완료 후 공유 가능" : "드래그 가능")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .font(.subheadline)
-        }
-        .padding(16)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.92),
-                    Color(red: 0.93, green: 0.96, blue: 1.0),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 20)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.08), radius: 16, y: 8)
-        
-        if clip.isPostProcessing {
-            cardBody
-                .contextMenu {
-                    Button("닫기") {
+                    Button {
                         appModel.removeClip(clip)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+            }
+        }
+        .background(isHovered ? Color.primary.opacity(0.04) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .onHover { isHovered = $0 }
+
+        if clip.isPostProcessing {
+            card
+                .contextMenu {
+                    Button("닫기") { appModel.removeClip(clip) }
                 }
         } else {
-            cardBody
+            card
                 .onDrag {
                     NSItemProvider(object: clip.fileURL as NSURL)
                 }
                 .contextMenu {
-                    Button("저장") {
-                        appModel.saveClip(clip)
-                    }
-
-                    Button("Finder에서 보기") {
-                        appModel.revealClipInFinder(clip)
-                    }
-
-                    Button("복사") {
-                        appModel.copyClipToPasteboard(clip)
-                    }
-
+                    Button("미리보기") { appModel.openPreview(for: clip) }
+                    Button("저장") { appModel.saveClip(clip) }
+                    Button("Finder에서 보기") { appModel.revealClipInFinder(clip) }
+                    Button("복사") { appModel.copyClipToPasteboard(clip) }
                     Divider()
-
-                    Button("닫기") {
-                        appModel.removeClip(clip)
-                    }
+                    Button("닫기") { appModel.removeClip(clip) }
                 }
         }
     }
 
-    private var fileIcon: NSImage {
-        NSWorkspace.shared.icon(forFile: clip.fileURL.path)
+    private func actionButton(_ label: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(label, systemImage: icon)
+                .font(.system(size: 11))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
     }
 }

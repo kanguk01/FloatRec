@@ -10,66 +10,37 @@ struct ClipThumbnailView: View {
         Button {
             appModel.openPreview(for: clip)
         } label: {
-            ZStack(alignment: .bottomLeading) {
+            ZStack {
                 Group {
                     if let thumbnail = appModel.thumbnail(for: clip) {
                         Image(nsImage: thumbnail)
                             .resizable()
                             .scaledToFill()
                     } else {
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.15, green: 0.22, blue: 0.33),
-                                Color(red: 0.27, green: 0.46, blue: 0.69),
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-
+                        Color(nsColor: .controlBackgroundColor)
                         Image(systemName: "video")
-                            .font(.system(size: 28, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.88))
+                            .font(.system(size: 22))
+                            .foregroundStyle(.tertiary)
                     }
                 }
 
-                LinearGradient(
-                    colors: [
-                        .clear,
-                        .black.opacity(0.56),
-                    ],
-                    startPoint: .center,
-                    endPoint: .bottom
-                )
-
-                HStack(alignment: .center) {
+                // 재생 아이콘
+                if !clip.isPostProcessing {
                     Image(systemName: "play.fill")
-                        .font(.caption.weight(.bold))
+                        .font(.system(size: 16))
                         .foregroundStyle(.white)
                         .padding(10)
-                        .background(Color.black.opacity(0.45), in: Circle())
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("미리보기")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                        Text(clip.formattedDuration)
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.85))
-                    }
+                        .background(.black.opacity(0.4), in: Circle())
                 }
-                .padding(14)
             }
-            .frame(height: 156)
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18)
-                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 18))
+            .frame(height: 140)
+            .frame(maxWidth: .infinity)
+            .clipped()
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(clip.isPostProcessing)
-        .opacity(clip.isPostProcessing ? 0.78 : 1)
+        .opacity(clip.isPostProcessing ? 0.6 : 1)
         .task(id: clip.id) {
             await appModel.loadThumbnailIfNeeded(for: clip)
         }

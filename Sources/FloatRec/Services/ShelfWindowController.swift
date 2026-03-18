@@ -12,8 +12,9 @@ final class ShelfWindowController {
                 .environmentObject(model)
         )
 
-        let targetSize = NSSize(width: 360, height: min(640, CGFloat(max(model.clips.count, 1)) * 286 + 92))
-        panel.setContentSize(targetSize)
+        let clipCount = max(model.clips.count, 1)
+        let height = min(560, CGFloat(clipCount) * 220 + 70)
+        panel.setContentSize(NSSize(width: 340, height: height))
         position(panel: panel)
         panel.orderFrontRegardless()
         self.panel = panel
@@ -25,7 +26,7 @@ final class ShelfWindowController {
 
     private func makePanel() -> NSPanel {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 260),
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 240),
             styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -43,6 +44,7 @@ final class ShelfWindowController {
         panel.standardWindowButton(.closeButton)?.isHidden = true
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
+        panel.animationBehavior = .utilityWindow
         return panel
     }
 
@@ -50,10 +52,9 @@ final class ShelfWindowController {
         let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let panelFrame = panel.frame
         let origin = NSPoint(
-            x: screenFrame.maxX - panelFrame.width - 20,
-            y: screenFrame.minY + 20
+            x: screenFrame.maxX - panelFrame.width - 16,
+            y: screenFrame.minY + 16
         )
-
         panel.setFrameOrigin(origin)
     }
 }
