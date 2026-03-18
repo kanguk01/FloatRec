@@ -43,7 +43,7 @@ final class RecordingCameraHUDController {
         }
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 94),
+            contentRect: NSRect(x: 0, y: 0, width: 312, height: 62),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -65,27 +65,27 @@ final class RecordingCameraHUDController {
         let cardView = NSView(frame: rootView.bounds)
         cardView.autoresizingMask = [.width, .height]
         cardView.wantsLayer = true
-        cardView.layer?.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 0.92).cgColor
-        cardView.layer?.cornerRadius = 22
+        cardView.layer?.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 0.88).cgColor
+        cardView.layer?.cornerRadius = 16
         cardView.layer?.borderWidth = 1
-        cardView.layer?.borderColor = NSColor(calibratedRed: 0.35, green: 0.84, blue: 0.98, alpha: 0.55).cgColor
+        cardView.layer?.borderColor = NSColor(calibratedRed: 0.35, green: 0.84, blue: 0.98, alpha: 0.34).cgColor
         rootView.addSubview(cardView)
 
         let titleLabel = NSTextField(labelWithString: "")
-        titleLabel.font = .systemFont(ofSize: 20, weight: .bold)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
         titleLabel.textColor = .white
         titleLabel.lineBreakMode = .byTruncatingTail
 
         let detailLabel = NSTextField(labelWithString: "")
-        detailLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        detailLabel.textColor = NSColor(calibratedRed: 0.70, green: 0.92, blue: 1.0, alpha: 0.98)
-        detailLabel.lineBreakMode = .byWordWrapping
-        detailLabel.maximumNumberOfLines = 2
+        detailLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        detailLabel.textColor = NSColor(calibratedRed: 0.76, green: 0.92, blue: 1.0, alpha: 0.92)
+        detailLabel.lineBreakMode = .byTruncatingTail
+        detailLabel.maximumNumberOfLines = 1
 
         let stack = NSStackView(views: [titleLabel, detailLabel])
         stack.orientation = .vertical
-        stack.spacing = 6
-        stack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
+        stack.spacing = 2
+        stack.edgeInsets = NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
         stack.frame = cardView.bounds
         stack.autoresizingMask = [.width, .height]
         stack.alignment = .leading
@@ -108,8 +108,8 @@ final class RecordingCameraHUDController {
         let visibleFrame = screen.visibleFrame
         let size = panel.frame.size
         let origin = CGPoint(
-            x: visibleFrame.maxX - size.width - 26,
-            y: visibleFrame.maxY - size.height - 28
+            x: visibleFrame.midX - size.width / 2,
+            y: visibleFrame.maxY - size.height - 10
         )
         panel.setFrameOrigin(origin)
     }
