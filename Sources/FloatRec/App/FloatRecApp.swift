@@ -9,6 +9,9 @@ struct FloatRecApp: App {
         MenuBarExtra("FloatRec", systemImage: appModel.statusItemSymbolName) {
             MenuBarContentView()
                 .environmentObject(appModel)
+                .onAppear {
+                    appDelegate.appModel = appModel
+                }
         }
         .menuBarExtraStyle(.window)
     }

@@ -116,7 +116,7 @@ final class ScreenCaptureSourceCatalog {
     private var displaySourcesByID: [String: SCDisplay] = [:]
     private var windowSourcesByID: [String: SCWindow] = [:]
     private var cachedSnapshot: CaptureSourceSnapshot?
-    private let snapshotTimeoutSeconds: TimeInterval = 5
+    private let snapshotTimeoutSeconds: TimeInterval = 10
 
     func snapshotFromCache() -> CaptureSourceSnapshot? {
         cachedSnapshot

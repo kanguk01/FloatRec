@@ -26,6 +26,15 @@ final class RecordingCoordinator {
         self.autoZoomProcessor = autoZoomProcessor
     }
 
+    func teardownOnTermination() {
+        if #available(macOS 15.0, *),
+           let recorder = liveRecorder as? ScreenCaptureRecorder {
+            recorder.teardownImmediately()
+            liveRecorder = nil
+        }
+        _ = cursorTrackingService.stopTracking()
+    }
+
     func startRecording(
         mode: CaptureMode,
         selectedSourceID: String?,
@@ -56,7 +65,13 @@ final class RecordingCoordinator {
             }
 
             if let resolvedSource {
-                let recorder = ScreenCaptureRecorder()
+                let recorder: ScreenCaptureRecorder
+                if let existing = liveRecorder as? ScreenCaptureRecorder {
+                    recorder = existing
+                } else {
+                    recorder = ScreenCaptureRecorder()
+                }
+
                 do {
                     let needsPostProcessing = isAutoZoomEnabled || isClickHighlightEnabled
                     logger.info(
@@ -77,7 +92,11 @@ final class RecordingCoordinator {
                     return
                 } catch {
                     _ = cursorTrackingService.stopTracking()
-                    liveRecorder = nil
+                    // Keep liveRecorder if the underlying stream is still capturing.
+                    // The recorder.start() method rolls back its own state on failure,
+                    // leaving the stream reusable for the next attempt.
+                    // Only if liveRecorder was nil (brand new recorder), nothing to preserve.
+                    logger.error("recorder.start failed: \(error.localizedDescription, privacy: .public) existingRecorder=\(self.liveRecorder != nil, privacy: .public)")
                     throw error
                 }
             }
@@ -89,18 +108,26 @@ final class RecordingCoordinator {
     func stopRecording() async throws -> RecordingArtifact {
         if #available(macOS 15.0, *),
            let recorder = liveRecorder as? ScreenCaptureRecorder {
-            defer { self.liveRecorder = nil }
+            // Keep liveRecorder alive so the underlying SCStream persists for reuse.
+            // Only nil it out on failure to avoid a poisoned recorder on the next start.
             let cursorTrack = cursorTrackingService.stopTracking()
-            let artifact = try await recorder.stopRecording()
-            logger.info(
-                "stop recording produced artifact: duration=\(artifact.duration, privacy: .public)s cursorTrack=\(cursorTrack != nil, privacy: .public) sampleCount=\(cursorTrack?.samples.count ?? 0, privacy: .public) clickCount=\(cursorTrack?.clickSamples.count ?? 0, privacy: .public)"
-            )
-            return RecordingArtifact(
-                fileURL: artifact.fileURL,
-                duration: artifact.duration,
-                sourceLabel: artifact.sourceLabel,
-                cursorTrack: cursorTrack
-            )
+            do {
+                let artifact = try await recorder.stopRecording()
+                logger.info(
+                    "stop recording produced artifact: duration=\(artifact.duration, privacy: .public)s cursorTrack=\(cursorTrack != nil, privacy: .public) sampleCount=\(cursorTrack?.samples.count ?? 0, privacy: .public) clickCount=\(cursorTrack?.clickSamples.count ?? 0, privacy: .public)"
+                )
+                return RecordingArtifact(
+                    fileURL: artifact.fileURL,
+                    duration: artifact.duration,
+                    sourceLabel: artifact.sourceLabel,
+                    cursorTrack: cursorTrack
+                )
+            } catch {
+                // The recorder is in a bad state; tear it down so next start creates a fresh one
+                recorder.teardownImmediately()
+                self.liveRecorder = nil
+                throw error
+            }
         }
 
         return try await demoRecordingService.stopRecording()
@@ -115,6 +142,10 @@ final class RecordingCoordinator {
         shouldPostProcess(artifact)
             && artifact.duration > RecordingFeatureFlags.synchronousPostProcessingDuration
             && artifact.duration <= RecordingFeatureFlags.maxBackgroundPostProcessingDuration
+    }
+
+    func needsPostProcessing(_ artifact: RecordingArtifact) -> Bool {
+        shouldProcessSynchronously(artifact) || shouldProcessInBackground(artifact)
     }
 
     func processRecordedArtifact(_ artifact: RecordingArtifact) async -> RecordingArtifact {

@@ -124,7 +124,7 @@ final class RecordingCameraHotKeyManager {
                 guard status == noErr,
                       hotKeyID.signature == RecordingCameraHotKeyManager.hotKeySignature,
                       let action = RecordingCameraHotKeyAction(rawValue: hotKeyID.id) else {
-                    return noErr
+                    return OSStatus(eventNotHandledErr)
                 }
 
                 let manager = Unmanaged<RecordingCameraHotKeyManager>.fromOpaque(userData).takeUnretainedValue()

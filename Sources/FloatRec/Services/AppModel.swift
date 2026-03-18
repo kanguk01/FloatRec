@@ -29,19 +29,10 @@ final class AppModel: ObservableObject {
     private let recordingCoordinator: RecordingCoordinator
     private let thumbnailService = ClipThumbnailService()
     private let areaSelectionOverlayController = AreaSelectionOverlayController()
-    private lazy var captureTargetPickerController: CaptureTargetPickerController = {
-        let controller = CaptureTargetPickerController()
-        controller.onSelection = { [weak self] selection in
-            self?.applyCaptureTargetSelection(selection)
-        }
-        controller.onCancel = { [weak self] in
-            self?.logger.info("content picker selection cancelled")
-        }
-        controller.onError = { [weak self] error in
-            self?.lastErrorMessage = "캡처 대상을 선택하지 못했습니다: \(error.localizedDescription)"
-        }
-        return controller
-    }()
+    private let captureSelectionOverlayController = CaptureSelectionOverlayController()
+    private let displayHighlightController = DisplayHighlightController()
+    private var activeHotKeyTask: Task<Void, Never>?
+    private var processingTimeoutTask: Task<Void, Never>?
     private var postProcessingTasks: [UUID: Task<Void, Never>] = [:]
     private var selectedSourceOverrides: [CaptureMode: CaptureSourceOption] = [:]
     private var selectedResolvedSources: [CaptureMode: ResolvedCaptureSource] = [:]
@@ -51,7 +42,10 @@ final class AppModel: ObservableObject {
         let manager = GlobalHotKeyManager()
         manager.onAction = { [weak self] action in
             Task { @MainActor [weak self] in
-                await self?.handleGlobalHotKey(action)
+                self?.activeHotKeyTask?.cancel()
+                self?.activeHotKeyTask = Task { [weak self] in
+                    await self?.handleGlobalHotKey(action)
+                }
             }
         }
         manager.register()
@@ -71,6 +65,10 @@ final class AppModel: ObservableObject {
         )
         installLifecycleObservers()
         _ = hotKeyManager
+    }
+
+    func teardownOnTermination() {
+        recordingCoordinator.teardownOnTermination()
     }
 
     var statusItemSymbolName: String {
@@ -134,7 +132,7 @@ final class AppModel: ObservableObject {
     func toggleRecording() async {
         switch recordingState {
         case .idle:
-            await startRecording(shouldPromptForTargetSelection: true)
+            await startRecording()
         case .recording:
             await stopRecording()
         case .requestingPermission, .processing:
@@ -151,11 +149,12 @@ final class AppModel: ObservableObject {
         case .toggleRecording:
             switch recordingState {
             case .idle:
-                let shouldPromptForTargetSelection = captureMode != .area && selectedSourceOption == nil
-                await startRecording(shouldPromptForTargetSelection: shouldPromptForTargetSelection)
+                await startRecording()
             case .recording:
                 await stopRecording()
-            case .requestingPermission, .processing:
+            case .requestingPermission:
+                cancelPendingCapturePreparation()
+            case .processing:
                 break
             }
         case .stopRecording:
@@ -164,7 +163,9 @@ final class AppModel: ObservableObject {
                 await stopRecording()
             case .requestingPermission:
                 cancelPendingCapturePreparation()
-            case .idle, .processing:
+            case .processing:
+                forceResetFromProcessing()
+            case .idle:
                 return
             }
         }
@@ -213,15 +214,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func startRecording(shouldPromptForTargetSelection: Bool) async {
-        guard !recordingState.isBusy else {
-            return
-        }
+    func startRecording() async {
+        guard !recordingState.isBusy else { return }
 
         lastErrorMessage = nil
         recordingState = .requestingPermission
-        logger.info("recording start requested for mode=\(self.captureMode.title, privacy: .public)")
-        captureTargetPickerController.cancelPresentation()
+        logger.info("recording start requested")
 
         let granted = await permissionService.ensureAccess()
         if !granted {
@@ -232,64 +230,71 @@ final class AppModel: ObservableObject {
                 lastErrorMessage = permissionService.deniedAccessMessage()
                 return
             }
-
             logger.info("recording start continuing because source access probe succeeded after denied permission request")
         }
 
-        if captureMode != .area,
-           !shouldPromptForTargetSelection,
-           selectedResolvedSource == nil,
-           displaySources.isEmpty && windowSources.isEmpty {
-            await refreshCaptureSources(force: false)
-        }
-
-        if captureMode != .area, shouldPromptForTargetSelection {
-            do {
-                _ = try await captureTargetPickerController.selectTarget(for: captureMode)
-            } catch PickerError.cancelled {
-                recordingState = .idle
-                return
-            } catch {
-                recordingState = .idle
-                logger.error("recording start blocked because target selection failed: \(error.localizedDescription, privacy: .public)")
-                lastErrorMessage = "캡처 대상을 선택하지 못했습니다: \(error.localizedDescription)"
-                return
-            }
-        } else if captureMode != .area {
-            logger.info(
-                "recording start reusing current target selection for mode=\(self.captureMode.title, privacy: .public) selectedSourceID=\(self.selectedSourceID ?? "nil", privacy: .public)"
-            )
-        }
-
-        let areaSelection: AreaSelection?
-        if captureMode == .area {
-            do {
-                areaSelection = try await areaSelectionOverlayController.selectArea()
-                lastAreaSelectionDescription = areaSelection?.sourceLabel
-            } catch AreaSelectionError.cancelled {
-                recordingState = .idle
-                return
-            } catch {
-                recordingState = .idle
-                lastErrorMessage = error.localizedDescription
-                return
-            }
-        } else {
-            areaSelection = nil
-        }
-
-        guard captureMode == .area || selectedSourceOption != nil else {
+        let selectionResult: CaptureSelectionResult
+        do {
+            selectionResult = try await captureSelectionOverlayController.selectCaptureSource()
+        } catch CaptureSelectionError.cancelled {
             recordingState = .idle
-            logger.error("recording start blocked because no source option is available")
-            lastErrorMessage = "선택한 캡처 모드에 사용할 대상이 없습니다."
             return
+        } catch {
+            recordingState = .idle
+            lastErrorMessage = error.localizedDescription
+            return
+        }
+
+        let resolvedSource: ResolvedCaptureSource
+        var areaSelection: AreaSelection? = nil
+
+        switch selectionResult {
+        case .display(let display):
+            captureMode = .display
+            resolvedSource = .display(display, sourceLabel: "디스플레이 녹화")
+            let option = CaptureSourceOption(
+                id: "display-\(display.displayID)",
+                title: "디스플레이",
+                detail: "\(Int(display.width))×\(Int(display.height))",
+                sourceLabel: "디스플레이 녹화"
+            )
+            selectedSourceOverrides[.display] = option
+            selectedResolvedSources[.display] = resolvedSource
+            selectedSourceID = option.id
+
+        case .window(let window):
+            captureMode = .window
+            let appName = window.owningApplication?.applicationName ?? "앱"
+            let windowTitle = window.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let sourceLabel = windowTitle.isEmpty ? appName : "\(appName) · \(windowTitle)"
+            resolvedSource = .window(window, sourceLabel: sourceLabel)
+            let option = CaptureSourceOption(
+                id: "window-\(window.windowID)",
+                title: windowTitle.isEmpty ? "\(appName) 창" : windowTitle,
+                detail: "\(appName) · \(Int(window.frame.width))×\(Int(window.frame.height))",
+                sourceLabel: sourceLabel
+            )
+            selectedSourceOverrides[.window] = option
+            selectedResolvedSources[.window] = resolvedSource
+            selectedSourceID = option.id
+
+        case .area(let area):
+            captureMode = .area
+            areaSelection = area
+            lastAreaSelectionDescription = area.sourceLabel
+            guard let resolved = try? await sourceCatalog.resolveAreaSelection(area) else {
+                recordingState = .idle
+                lastErrorMessage = "영역 선택을 처리하지 못했습니다."
+                return
+            }
+            resolvedSource = resolved
         }
 
         do {
             try await recordingCoordinator.startRecording(
                 mode: captureMode,
                 selectedSourceID: selectedSourceID,
-                resolvedSourceOverride: selectedResolvedSource,
+                resolvedSourceOverride: resolvedSource,
                 areaSelection: areaSelection,
                 isAutoZoomEnabled: featureFlags.isAutoZoomEnabled,
                 isClickHighlightEnabled: featureFlags.isClickHighlightEnabled,
@@ -307,60 +312,70 @@ final class AppModel: ObservableObject {
     }
 
     func stopRecording() async {
-        guard recordingState.isRecording else {
-            return
-        }
+        guard recordingState.isRecording else { return }
 
-        cancelCaptureSelections()
+        areaSelectionOverlayController.cancelSelection()
         recordingState = .processing
+        scheduleProcessingTimeout()
 
         do {
             let artifact = try await recordingCoordinator.stopRecording()
-            let finalArtifact: RecordingArtifact
-            let shouldProcessInBackground = recordingCoordinator.shouldProcessInBackground(artifact)
+            let shouldProcess = recordingCoordinator.needsPostProcessing(artifact)
+
             logger.info(
-                "stop recording summary: duration=\(artifact.duration, privacy: .public)s background=\(shouldProcessInBackground, privacy: .public) sync=\(self.recordingCoordinator.shouldProcessSynchronously(artifact), privacy: .public) cursorTrack=\(artifact.cursorTrack != nil, privacy: .public)"
+                "stop recording summary: duration=\(artifact.duration, privacy: .public)s needsProcessing=\(shouldProcess, privacy: .public)"
             )
 
-            if recordingCoordinator.shouldProcessSynchronously(artifact) {
-                finalArtifact = await recordingCoordinator.processRecordedArtifact(artifact)
-            } else {
-                finalArtifact = artifact
-            }
-
             let clip = RecordingClip(
-                fileURL: finalArtifact.fileURL,
-                duration: finalArtifact.duration,
-                sourceLabel: finalArtifact.sourceLabel,
-                isPostProcessing: shouldProcessInBackground
+                fileURL: artifact.fileURL,
+                duration: artifact.duration,
+                sourceLabel: artifact.sourceLabel,
+                isPostProcessing: shouldProcess
             )
 
             clips.insert(clip, at: 0)
             recordingState = .idle
+            processingTimeoutTask?.cancel()
             showShelf()
 
-            if shouldProcessInBackground {
+            if shouldProcess {
                 enqueuePostProcessing(for: clip, artifact: artifact)
             }
         } catch {
             recordingState = .idle
+            processingTimeoutTask?.cancel()
             lastErrorMessage = error.localizedDescription
         }
     }
 
-    func presentCaptureTargetPicker() {
-        guard captureMode != .area else {
-            return
-        }
-
-        guard !recordingState.isBusy else {
-            lastErrorMessage = "준비 중이거나 후처리 중일 때는 캡처 대상을 바꿀 수 없습니다."
-            return
-        }
-
+    func selectSource(_ option: CaptureSourceOption) {
+        guard !recordingState.isBusy else { return }
+        selectedSourceOverrides[captureMode] = option
+        selectedSourceID = option.id
         lastErrorMessage = nil
-        logger.info("presenting capture target picker for mode=\(self.captureMode.title, privacy: .public)")
-        captureTargetPickerController.present(for: captureMode)
+
+        Task {
+            if let resolved = try? await sourceCatalog.resolveSource(
+                mode: captureMode,
+                selectedSourceID: option.id
+            ) {
+                selectedResolvedSources[captureMode] = resolved
+            }
+        }
+    }
+
+    func highlightSource(_ option: CaptureSourceOption) {
+        guard captureMode == .display else {
+            displayHighlightController.hideAll()
+            return
+        }
+        let idString = option.id.replacingOccurrences(of: "display-", with: "")
+        guard let displayID = UInt32(idString) else { return }
+        displayHighlightController.showHighlight(for: displayID, label: option.title)
+    }
+
+    func clearSourceHighlight() {
+        displayHighlightController.hideAll()
     }
 
     func showShelf() {
@@ -530,14 +545,10 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func cancelCaptureSelections() {
-        captureTargetPickerController.cancelPresentation()
-        areaSelectionOverlayController.cancelSelection()
-    }
-
     private func cancelPendingCapturePreparation() {
         logger.info("cancelling pending capture preparation")
-        cancelCaptureSelections()
+        captureSelectionOverlayController.cancelSelection()
+        areaSelectionOverlayController.cancelSelection()
         recordingState = .idle
         lastErrorMessage = nil
     }
@@ -576,12 +587,24 @@ final class AppModel: ObservableObject {
         syncSelectedSource()
     }
 
-    private func applyCaptureTargetSelection(_ selection: CaptureTargetPickerController.Selection) {
-        captureMode = selection.mode
-        selectedSourceOverrides[selection.mode] = selection.source
-        selectedResolvedSources[selection.mode] = selection.resolvedSource
-        selectedSourceID = selection.source.id
+    private func forceResetFromProcessing() {
+        logger.warning("force-resetting from processing state via hotkey")
+        recordingState = .idle
         lastErrorMessage = nil
+    }
+
+    private func scheduleProcessingTimeout() {
+        processingTimeoutTask?.cancel()
+        processingTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard !Task.isCancelled else { return }
+            guard let self else { return }
+            if case .processing = self.recordingState {
+                self.logger.warning("processing state timed out after 10 seconds, forcing idle")
+                self.recordingState = .idle
+                self.lastErrorMessage = "녹화 정리가 너무 오래 걸려 중단했습니다."
+            }
+        }
     }
 
     private func enqueuePostProcessing(for clip: RecordingClip, artifact: RecordingArtifact) {

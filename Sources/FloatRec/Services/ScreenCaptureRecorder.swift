@@ -16,13 +16,40 @@ private struct CapturePerformanceProfile {
 @MainActor
 final class ScreenCaptureRecorder: NSObject {
     private let logger = Logger(subsystem: "dev.floatrec.app", category: "screen-capture-recorder")
+
     private var stream: SCStream?
+    private var isCapturing = false
     private var recordingOutput: SCRecordingOutput?
     private var outputURL: URL?
     private var sourceLabel: String?
+
     private var recordingDidStartContinuation: CheckedContinuation<Void, Error>?
     private var recordingDidFinishContinuation: CheckedContinuation<Void, Error>?
     private var pendingRecordingDidFinishResult: Result<Void, Error>?
+
+    func teardownImmediately() {
+        if let stream, let recordingOutput {
+            try? stream.removeRecordingOutput(recordingOutput)
+        }
+        if let stream, isCapturing {
+            Task { try? await stream.stopCapture() }
+        }
+        stream = nil
+        isCapturing = false
+        recordingOutput = nil
+        outputURL = nil
+
+        // Resume pending continuations before dropping them to avoid hanging callers
+        let startCont = recordingDidStartContinuation
+        recordingDidStartContinuation = nil
+        startCont?.resume(throwing: CancellationError())
+
+        let finishCont = recordingDidFinishContinuation
+        recordingDidFinishContinuation = nil
+        finishCont?.resume(throwing: CancellationError())
+
+        pendingRecordingDidFinishResult = nil
+    }
 
     func start(source: ResolvedCaptureSource, showBuiltInClickHighlight: Bool) async throws {
         let filter = source.makeFilter()
@@ -54,61 +81,78 @@ final class ScreenCaptureRecorder: NSObject {
 
         logger.info(
             """
-            starting stream with capture profile: output=\(Int(captureProfile.outputSize.width), privacy: .public)x\(Int(captureProfile.outputSize.height), privacy: .public) fps=\(self.frameRateDescription(for: captureProfile.minimumFrameInterval), privacy: .public) queueDepth=\(captureProfile.queueDepth, privacy: .public) pixelFormat=\(self.pixelFormatDescription(captureProfile.pixelFormat), privacy: .public) builtInClicks=\(showBuiltInClickHighlight, privacy: .public)
+            starting capture: output=\(Int(captureProfile.outputSize.width), privacy: .public)x\(Int(captureProfile.outputSize.height), privacy: .public) fps=\(self.frameRateDescription(for: captureProfile.minimumFrameInterval), privacy: .public) builtInClicks=\(showBuiltInClickHighlight, privacy: .public)
             """
         )
 
-        let recordingOutput = SCRecordingOutput(
+        let newRecordingOutput = SCRecordingOutput(
             configuration: recordingConfiguration,
             delegate: self
         )
-        let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
-
-        self.outputURL = outputURL
-        self.stream = stream
-        self.recordingOutput = recordingOutput
-        self.sourceLabel = source.sourceLabel
         self.pendingRecordingDidFinishResult = nil
+        self.sourceLabel = source.sourceLabel
 
-        try stream.addRecordingOutput(recordingOutput)
-
-        try await withCheckedThrowingContinuation { continuation in
-            recordingDidStartContinuation = continuation
-
-            Task {
-                do {
-                    try await stream.startCapture()
-                } catch {
-                    recordingDidStartContinuation = nil
-                    continuation.resume(throwing: error)
-                }
+        if let existingStream = stream, isCapturing {
+            // 기존 스트림 재사용: 필터와 설정만 교체
+            logger.info("reusing active stream, updating filter and adding output")
+            do {
+                try await existingStream.updateContentFilter(filter)
+                try await existingStream.updateConfiguration(configuration)
+                self.outputURL = outputURL
+                self.recordingOutput = newRecordingOutput
+                try existingStream.addRecordingOutput(newRecordingOutput)
+                try await waitForRecordingStart()
+            } catch {
+                // Roll back state on failure so the stream remains reusable
+                self.recordingOutput = nil
+                self.outputURL = nil
+                throw error
+            }
+        } else {
+            // 최초 스트림 생성
+            self.outputURL = outputURL
+            self.recordingOutput = newRecordingOutput
+            let newStream = SCStream(filter: filter, configuration: configuration, delegate: self)
+            self.stream = newStream
+            do {
+                try newStream.addRecordingOutput(newRecordingOutput)
+                try await startCaptureWithTimeout(newStream)
+                isCapturing = true
+            } catch {
+                // Roll back state -- this stream is dead
+                self.stream = nil
+                self.recordingOutput = nil
+                self.outputURL = nil
+                self.isCapturing = false
+                throw error
             }
         }
     }
 
     func stopRecording() async throws -> RecordingArtifact {
-        guard let stream, let recordingOutput, let outputURL else {
+        guard let recordingOutput, let outputURL else {
+            throw RecordingServiceError.notRecording
+        }
+        guard let stream else {
             throw RecordingServiceError.notRecording
         }
 
         let durationFallback = recordingOutput.recordedDuration.seconds
 
         do {
-            do {
-                try stream.removeRecordingOutput(recordingOutput)
-            } catch {
-                // Fallback to stopCapture path if the recording output is already detached.
-            }
-
-            try await stopCaptureWithTimeout(stream)
+            try stream.removeRecordingOutput(recordingOutput)
             try await waitForRecordingFinish()
         } catch {
+            // removeRecordingOutput() threw -- the output was not properly detached.
+            // Clean up any continuation that might have been set.
+            let leakedCont = recordingDidFinishContinuation
             recordingDidFinishContinuation = nil
+            leakedCont?.resume(throwing: error)
             pendingRecordingDidFinishResult = nil
-            throw error
+            logger.warning("removeRecordingOutput or waitForRecordingFinish failed: \(error.localizedDescription, privacy: .public)")
         }
 
-        self.stream = nil
+        // 스트림은 절대 멈추지 않음 — output만 해제
         self.recordingOutput = nil
         self.outputURL = nil
         self.pendingRecordingDidFinishResult = nil
@@ -123,62 +167,94 @@ final class ScreenCaptureRecorder: NSObject {
         )
     }
 
-    private func stopCaptureWithTimeout(_ stream: SCStream) async throws {
-        let stopTask = Task<Void, Error> {
-            try await stream.stopCapture()
-        }
+    private func startCaptureWithTimeout(_ stream: SCStream) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            recordingDidStartContinuation = continuation
 
-        let timeoutTask = Task<Void, Error> {
-            try await Task.sleep(for: .seconds(3))
-            throw RecordingServiceError.notRecording
-        }
-
-        defer {
-            stopTask.cancel()
-            timeoutTask.cancel()
-        }
-
-        do {
-            _ = try await withThrowingTaskGroup(of: Void.self) { group in
-                group.addTask { try await stopTask.value }
-                group.addTask { try await timeoutTask.value }
-                let value: Void? = try await group.next()
-                group.cancelAll()
-                return value
+            Task { @MainActor in
+                do {
+                    try await stream.startCapture()
+                    // startCapture() returned without error, but recording hasn't truly started
+                    // until the delegate callback fires. If the callback already fired and
+                    // consumed the continuation, do nothing.
+                } catch {
+                    if let cont = self.recordingDidStartContinuation {
+                        self.recordingDidStartContinuation = nil
+                        cont.resume(throwing: error)
+                    }
+                }
             }
-        } catch {
-            // Proceed with the partially finalized file instead of hanging forever.
+
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(8))
+                if let cont = self.recordingDidStartContinuation {
+                    self.logger.error("startCapture timed out after 8 seconds")
+                    self.recordingDidStartContinuation = nil
+                    cont.resume(throwing: RecordingServiceError.writerSetupFailed)
+                }
+            }
+        }
+    }
+
+    private func waitForRecordingStart() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            recordingDidStartContinuation = continuation
+
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(5))
+                if let cont = self.recordingDidStartContinuation {
+                    self.logger.error("recording start callback timed out")
+                    self.recordingDidStartContinuation = nil
+                    cont.resume(throwing: RecordingServiceError.writerSetupFailed)
+                }
+            }
         }
     }
 
     private func waitForRecordingFinish() async throws {
+        // Check if the delegate already delivered the result before we even started waiting
+        if let pending = pendingRecordingDidFinishResult {
+            pendingRecordingDidFinishResult = nil
+            return try pending.get()
+        }
+
+        // Race the delegate callback against a timeout
         do {
-            _ = try await withThrowingTaskGroup(of: Void.self) { group in
-                group.addTask { try await self.awaitRecordingDidFinishSignal() }
-                group.addTask {
-                    try await Task.sleep(for: .seconds(2))
-                    throw RecordingServiceError.writerSetupFailed
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                recordingDidFinishContinuation = continuation
+
+                Task { @MainActor in
+                    // Check again in case the callback arrived between our earlier check
+                    // and setting the continuation
+                    if let pending = self.pendingRecordingDidFinishResult {
+                        guard self.recordingDidFinishContinuation != nil else { return }
+                        self.pendingRecordingDidFinishResult = nil
+                        self.recordingDidFinishContinuation = nil
+                        switch pending {
+                        case .success:
+                            continuation.resume()
+                        case .failure(let err):
+                            continuation.resume(throwing: err)
+                        }
+                        return
+                    }
                 }
-                let value: Void? = try await group.next()
-                group.cancelAll()
-                return value
+
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(3))
+                    if let cont = self.recordingDidFinishContinuation {
+                        self.recordingDidFinishContinuation = nil
+                        cont.resume()  // Treat timeout as success (file is already written)
+                    }
+                }
             }
         } catch {
-            // If the finish callback is missing, proceed with the file that was already written
-            // instead of leaving the app stuck in the processing state forever.
+            // Delegate signaled an error during finish; proceed with existing file
+            logger.warning("recording finish signal received error: \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    private func awaitRecordingDidFinishSignal() async throws {
-        if let pendingRecordingDidFinishResult {
-            self.pendingRecordingDidFinishResult = nil
-            return try pendingRecordingDidFinishResult.get()
-        }
-
-        try await withCheckedThrowingContinuation { continuation in
-            recordingDidFinishContinuation = continuation
-        }
-    }
+    // MARK: - Performance Profile
 
     private func capturePerformanceProfile(
         for source: ResolvedCaptureSource,
@@ -276,6 +352,8 @@ final class ScreenCaptureRecorder: NSObject {
         }
     }
 
+    // MARK: - Delegate Callbacks
+
     private func handleRecordingDidStart() {
         recordingDidStartContinuation?.resume()
         recordingDidStartContinuation = nil
@@ -302,26 +380,19 @@ final class ScreenCaptureRecorder: NSObject {
             }
             return
         }
-
         pendingRecordingDidFinishResult = result
     }
 
     private func frameRateDescription(for frameInterval: CMTime) -> Int {
-        guard frameInterval.seconds > 0 else {
-            return 0
-        }
-
+        guard frameInterval.seconds > 0 else { return 0 }
         return Int((1 / frameInterval.seconds).rounded())
     }
 
     private func pixelFormatDescription(_ pixelFormat: OSType) -> String {
         switch pixelFormat {
-        case kCVPixelFormatType_32BGRA:
-            "BGRA"
-        case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange:
-            "420v"
-        default:
-            "\(pixelFormat)"
+        case kCVPixelFormatType_32BGRA: "BGRA"
+        case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange: "420v"
+        default: "\(pixelFormat)"
         }
     }
 }
@@ -329,19 +400,34 @@ final class ScreenCaptureRecorder: NSObject {
 @available(macOS 15.0, *)
 extension ScreenCaptureRecorder: SCRecordingOutputDelegate {
     nonisolated func recordingOutputDidStartRecording(_ recordingOutput: SCRecordingOutput) {
+        let outputID = ObjectIdentifier(recordingOutput)
         Task { @MainActor in
+            guard let currentOutput = self.recordingOutput,
+                  ObjectIdentifier(currentOutput) == outputID else {
+                self.logger.info("ignoring didStartRecording from stale output")
+                return
+            }
             self.handleRecordingDidStart()
         }
     }
 
     nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: any Error) {
+        let outputID = ObjectIdentifier(recordingOutput)
         Task { @MainActor in
+            guard let currentOutput = self.recordingOutput,
+                  ObjectIdentifier(currentOutput) == outputID else {
+                self.logger.info("ignoring didFail from stale output")
+                return
+            }
             self.handleRecordingDidFail(error)
         }
     }
 
     nonisolated func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
         Task { @MainActor in
+            // Allow finish callbacks even for stale outputs --
+            // the delegate fires after removeRecordingOutput() sets self.recordingOutput = nil.
+            // We still need to resolve the pending finish continuation.
             self.handleRecordingDidFinish()
         }
     }
@@ -351,6 +437,10 @@ extension ScreenCaptureRecorder: SCRecordingOutputDelegate {
 extension ScreenCaptureRecorder: SCStreamDelegate {
     nonisolated func stream(_ stream: SCStream, didStopWithError error: any Error) {
         Task { @MainActor in
+            self.logger.error("SCStream stopped unexpectedly: \(error.localizedDescription, privacy: .public)")
+            self.isCapturing = false
+            self.stream = nil
+            self.recordingOutput = nil
             self.handleRecordingDidFail(error)
         }
     }

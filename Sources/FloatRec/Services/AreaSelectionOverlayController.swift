@@ -65,11 +65,13 @@ final class AreaSelectionOverlayController {
     }
 
     private func teardown() {
-        windows.forEach { window in
-            window.orderOut(nil)
-            window.close()
-        }
+        let windowsToRemove = windows
         windows.removeAll()
+        windowsToRemove.forEach { window in
+            window.selectionHandler = nil
+            window.cancelHandler = nil
+            window.orderOut(nil)
+        }
     }
 }
 
@@ -93,6 +95,7 @@ private final class AreaSelectionWindow: NSWindow {
         backgroundColor = .clear
         ignoresMouseEvents = false
         hasShadow = false
+        animationBehavior = .none
 
         let overlayView = AreaSelectionOverlayView(screen: screen)
         overlayView.selectionHandler = { [weak self] selection in
@@ -213,9 +216,15 @@ private final class AreaSelectionOverlayView: NSView {
             return
         }
 
+        let flippedRect = CGRect(
+            x: selectionRect.origin.x,
+            y: bounds.height - selectionRect.origin.y - selectionRect.height,
+            width: selectionRect.width,
+            height: selectionRect.height
+        )
         let selection = AreaSelection(
             displayID: displayID,
-            rect: selectionRect
+            rect: flippedRect
         )
         selectionHandler?(selection)
     }

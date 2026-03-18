@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MenuBarContentView: View {
     @EnvironmentObject private var appModel: AppModel
+    @State private var hoveredSourceID: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -61,38 +62,41 @@ struct MenuBarContentView: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(appModel.captureSelectionSummary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Text("녹화 시작을 누르면 선택기가 열리고, 클릭한 대상이 바로 녹화됩니다.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-
-                        Text("단축키 녹화는 현재 선택된 대상을 바로 사용합니다.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-
-                        Button {
-                            appModel.presentCaptureTargetPicker()
-                        } label: {
-                            Label("미리 선택", systemImage: "cursorarrow.click")
-                                .frame(maxWidth: .infinity)
+                        if appModel.currentSourceOptions.isEmpty && !appModel.isRefreshingSources {
+                            Text("소스를 불러오는 중...")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 12)
+                                .onAppear {
+                                    Task {
+                                        await appModel.refreshCaptureSources(force: true)
+                                    }
+                                }
+                        } else {
+                            ForEach(appModel.currentSourceOptions) { option in
+                                sourceRow(option)
+                            }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(appModel.recordingState.isBusy)
 
-                        HStack {
-                            if let selectedSource = appModel.selectedSourceOption {
-                                Text(selectedSource.title)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            } else {
-                                Text("호버로 강조된 대상을 클릭하면 바로 선택됩니다.")
+                        if appModel.isRefreshingSources {
+                            HStack(spacing: 6) {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                Text("소스 갱신 중...")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 4)
+                        }
+
+                        Divider()
+
+                        HStack {
+                            Text("목록에서 대상을 선택한 뒤 녹화를 시작하세요.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
 
                             Spacer()
 
@@ -104,6 +108,10 @@ struct MenuBarContentView: View {
                             .font(.caption)
                             .disabled(appModel.recordingState.isBusy || appModel.isRefreshingSources)
                         }
+
+                        Text("단축키 녹화는 현재 선택된 대상을 바로 사용합니다.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -311,5 +319,63 @@ struct MenuBarContentView: View {
         }
         .padding(16)
         .frame(width: 320)
+        .onAppear {
+            Task {
+                await appModel.refreshCaptureSourcesIfNeeded()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sourceRow(_ option: CaptureSourceOption) -> some View {
+        let isSelected = appModel.selectedSourceID == option.id
+        let isHovered = hoveredSourceID == option.id
+
+        Button {
+            appModel.selectSource(option)
+        } label: {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(option.title)
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    if !option.detail.isEmpty {
+                        Text(option.detail)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.accentColor)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected
+                          ? Color.accentColor.opacity(0.12)
+                          : (isHovered ? Color.primary.opacity(0.06) : Color.clear))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .disabled(appModel.recordingState.isBusy)
+        .onHover { hovering in
+            hoveredSourceID = hovering ? option.id : nil
+            if hovering {
+                appModel.highlightSource(option)
+            } else {
+                appModel.clearSourceHighlight()
+            }
+        }
     }
 }
