@@ -246,16 +246,33 @@ final class ScreenCaptureRecorder: NSObject {
     }
 
     private func resolvedDuration(for outputURL: URL, fallback: TimeInterval) async -> TimeInterval {
-        let asset = AVURLAsset(url: outputURL)
+        let asset = AVURLAsset(
+            url: outputURL,
+            options: [AVURLAssetPreferPreciseDurationAndTimingKey: false]
+        )
+        let safeFallback = max(fallback, 1)
 
-        do {
-            let duration = try await asset.load(.duration).seconds
-            guard duration.isFinite, duration > 0 else {
-                return max(fallback, 1)
+        return await withTaskGroup(of: TimeInterval.self) { group in
+            group.addTask {
+                do {
+                    let duration = try await asset.load(.duration).seconds
+                    guard duration.isFinite, duration > 0 else {
+                        return safeFallback
+                    }
+                    return max(duration, safeFallback)
+                } catch {
+                    return safeFallback
+                }
             }
-            return max(duration, fallback, 1)
-        } catch {
-            return max(fallback, 1)
+
+            group.addTask {
+                try? await Task.sleep(for: .milliseconds(400))
+                return safeFallback
+            }
+
+            let resolvedDuration = await group.next() ?? safeFallback
+            group.cancelAll()
+            return resolvedDuration
         }
     }
 
