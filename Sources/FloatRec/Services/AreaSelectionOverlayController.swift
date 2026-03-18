@@ -61,7 +61,10 @@ final class AreaSelectionOverlayController {
     }
 
     private func teardown() {
-        windows.forEach { $0.orderOut(nil) }
+        windows.forEach { window in
+            window.orderOut(nil)
+            window.close()
+        }
         windows.removeAll()
     }
 }

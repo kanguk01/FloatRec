@@ -136,6 +136,10 @@ final class AppModel: ObservableObject {
     }
 
     func refreshCaptureSourcesIfNeeded() async {
+        guard displaySources.isEmpty, windowSources.isEmpty else {
+            return
+        }
+
         await refreshCaptureSources(force: false)
     }
 

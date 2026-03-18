@@ -18,7 +18,7 @@ final class CaptureTargetPickerController: NSObject {
     override init() {
         super.init()
         picker.add(self)
-        picker.isActive = true
+        picker.isActive = false
         picker.maximumStreamCount = 1
     }
 
@@ -86,6 +86,7 @@ extension CaptureTargetPickerController: SCContentSharingPickerObserver {
         didCancelFor stream: SCStream?
     ) {
         Task { @MainActor [weak self] in
+            picker.isActive = false
             self?.onCancel?()
         }
     }
@@ -108,16 +109,19 @@ extension CaptureTargetPickerController: SCContentSharingPickerObserver {
             }
 
             guard let selection else {
+                picker.isActive = false
                 self.onError?(PickerError.unsupportedSelection)
                 return
             }
 
+            picker.isActive = false
             self.onSelection?(selection)
         }
     }
 
     nonisolated func contentSharingPickerStartDidFailWithError(_ error: Error) {
         Task { @MainActor [weak self] in
+            self?.picker.isActive = false
             self?.onError?(error)
         }
     }
