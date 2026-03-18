@@ -7,22 +7,16 @@ final class RecordingCameraHUDController {
     private var cardView: NSView?
     private var titleLabel: NSTextField?
     private var detailLabel: NSTextField?
-    private var hideTask: Task<Void, Never>?
 
-    func showHint() {
-        show(
-            title: "수동 카메라 준비",
-            detail: "⌃1 반복 확대 · ⌃2 따라가기 · ⌃3 전체화면 · ⌃4 스포트라이트"
-        )
-    }
-
-    func showState(title: String, detail: String) {
+    func showStatus(title: String, detail: String) {
         show(title: title, detail: detail)
     }
 
+    func showHint(detail: String) {
+        show(title: "수동 카메라", detail: detail)
+    }
+
     func hide() {
-        hideTask?.cancel()
-        hideTask = nil
         panel?.orderOut(nil)
     }
 
@@ -31,27 +25,16 @@ final class RecordingCameraHUDController {
         titleLabel?.stringValue = title
         detailLabel?.stringValue = detail
         layout(panel: panel)
-        panel.alphaValue = 0
-        panel.orderFrontRegardless()
-
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.12
-            panel.animator().alphaValue = 1
-        }
-
-        hideTask?.cancel()
-        hideTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(1.25))
-            guard let self else { return }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.18
-            self.panel?.animator().alphaValue = 0
-        }, completionHandler: {
-            Task { @MainActor [weak self] in
-                self?.panel?.orderOut(nil)
+        if panel.alphaValue < 1 {
+            panel.alphaValue = 0
+            panel.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.12
+                panel.animator().alphaValue = 1
             }
-        })
-    }
+        } else {
+            panel.orderFrontRegardless()
+        }
     }
 
     private func makePanelIfNeeded() -> NSPanel {
@@ -60,7 +43,7 @@ final class RecordingCameraHUDController {
         }
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 104),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 94),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -89,19 +72,20 @@ final class RecordingCameraHUDController {
         rootView.addSubview(cardView)
 
         let titleLabel = NSTextField(labelWithString: "")
-        titleLabel.font = .systemFont(ofSize: 24, weight: .bold)
+        titleLabel.font = .systemFont(ofSize: 20, weight: .bold)
         titleLabel.textColor = .white
         titleLabel.lineBreakMode = .byTruncatingTail
 
         let detailLabel = NSTextField(labelWithString: "")
-        detailLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        detailLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         detailLabel.textColor = NSColor(calibratedRed: 0.70, green: 0.92, blue: 1.0, alpha: 0.98)
         detailLabel.lineBreakMode = .byWordWrapping
+        detailLabel.maximumNumberOfLines = 2
 
         let stack = NSStackView(views: [titleLabel, detailLabel])
         stack.orientation = .vertical
-        stack.spacing = 8
-        stack.edgeInsets = NSEdgeInsets(top: 18, left: 22, bottom: 18, right: 22)
+        stack.spacing = 6
+        stack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
         stack.frame = cardView.bounds
         stack.autoresizingMask = [.width, .height]
         stack.alignment = .leading
@@ -124,8 +108,8 @@ final class RecordingCameraHUDController {
         let visibleFrame = screen.visibleFrame
         let size = panel.frame.size
         let origin = CGPoint(
-            x: visibleFrame.midX - size.width / 2,
-            y: visibleFrame.maxY - size.height - 54
+            x: visibleFrame.maxX - size.width - 26,
+            y: visibleFrame.maxY - size.height - 28
         )
         panel.setFrameOrigin(origin)
     }

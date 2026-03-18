@@ -143,7 +143,7 @@ final class CursorTrackingService {
             }
         }
         cameraHotKeyManager.register()
-        cameraHUDController.showHint()
+        refreshCameraHUD()
     }
 
     private func removeCameraHotKeys() {
@@ -195,7 +195,7 @@ final class CursorTrackingService {
         )
         cameraControlEvents.append(actionEvent)
         previewCameraState = nextPreviewState(for: action)
-        showCameraFeedback(for: action, state: previewCameraState)
+        refreshCameraHUD()
         logger.info(
             "captured camera control: action=\(actionEvent.action.rawValue, privacy: .public) time=\(timestamp, privacy: .public)"
         )
@@ -267,42 +267,27 @@ final class CursorTrackingService {
         }
     }
 
-    private func showCameraFeedback(for action: RecordingCameraHotKeyAction, state: PreviewCameraState) {
-        let title: String
-        let detail: String
-
-        switch action {
-        case .stepZoom:
-            switch state.mode {
-            case .spotlight:
-                title = "줌 \(state.zoomStep)단계"
-                detail = "현재 커서 위치를 더 가까이 봅니다 · \(action.displayString)"
-            case .overview, .follow:
-                title = "줌 조정"
-                detail = "현재 위치 확대 상태를 갱신합니다 · \(action.displayString)"
-            }
-        case .toggleFollow:
-            if case .follow = state.mode {
-                title = "따라가기 \(state.zoomStep)단계"
-                detail = "커서를 부드럽게 따라가며 확대를 유지합니다 · \(action.displayString)"
-            } else {
-                title = "따라가기 꺼짐"
-                detail = "현재 카메라 추적을 멈춥니다 · \(action.displayString)"
-            }
-        case .resetOverview:
-            title = "전체 화면 복귀"
-            detail = "카메라를 기본 시야로 되돌립니다 · \(action.displayString)"
-        case .toggleSpotlightEffect:
-            title = state.isSpotlightEnabled ? "스포트라이트 켜짐" : "스포트라이트 꺼짐"
-            detail = state.isSpotlightEnabled
-                ? "집중 영역만 밝게 남겨 둡니다 · \(action.displayString)"
-                : "빛 강조 없이 카메라 이동만 유지합니다 · \(action.displayString)"
-        }
-
-        cameraHUDController.showState(
-            title: title,
-            detail: detail
+    private func refreshCameraHUD() {
+        cameraHUDController.showStatus(
+            title: hudTitle(for: previewCameraState),
+            detail: hudDetail(for: previewCameraState)
         )
+    }
+
+    private func hudTitle(for state: PreviewCameraState) -> String {
+        switch state.mode {
+        case .overview:
+            return "수동 카메라 · 전체 화면"
+        case .spotlight:
+            return "수동 카메라 · 줌 \(state.zoomStep)단계"
+        case .follow:
+            return "수동 카메라 · 따라가기 \(state.zoomStep)단계"
+        }
+    }
+
+    private func hudDetail(for state: PreviewCameraState) -> String {
+        let spotlightLabel = state.isSpotlightEnabled ? "스포트라이트 켜짐" : "스포트라이트 꺼짐"
+        return "\(spotlightLabel) · ⌃1 확대 · ⌃2 따라가기 · ⌃3 전체화면 · ⌃4 스포트라이트"
     }
 }
 
