@@ -5,15 +5,19 @@ import OSLog
 @MainActor
 final class CursorTrackingService {
     private let logger = Logger(subsystem: "dev.floatrec.app", category: "cursor-tracking")
+    private let cameraHotKeyManager = RecordingCameraHotKeyManager()
     private var trackingTask: Task<Void, Never>?
     private var globalMouseMonitor: Any?
     private var startedAt: TimeInterval?
     private var trackingRect: CGRect?
     private var samples: [CursorTrackSample] = []
     private var clickSamples: [CursorClickSample] = []
+    private var cameraControlEvents: [CameraControlEvent] = []
+    private var cameraControlStyle: CameraControlStyle = .automatic
 
-    func startTracking(for source: ResolvedCaptureSource, enabled: Bool) {
+    func startTracking(for source: ResolvedCaptureSource, enabled: Bool, cameraControlStyle: CameraControlStyle) {
         _ = stopTracking()
+        self.cameraControlStyle = cameraControlStyle
 
         guard enabled, let trackingRect = source.autoZoomTrackingRect, trackingRect.width > 0, trackingRect.height > 0 else {
             logger.info(
@@ -27,6 +31,7 @@ final class CursorTrackingService {
         logger.info("cursor tracking started: rect=\(self.rectDescription(trackingRect), privacy: .public)")
         captureSample()
         installGlobalMouseMonitor()
+        installCameraHotKeysIfNeeded()
 
         trackingTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -44,19 +49,26 @@ final class CursorTrackingService {
         trackingTask?.cancel()
         trackingTask = nil
         removeGlobalMouseMonitor()
+        removeCameraHotKeys()
 
         defer {
             startedAt = nil
             trackingRect = nil
             samples.removeAll()
             clickSamples.removeAll()
+            cameraControlEvents.removeAll()
+            cameraControlStyle = .automatic
         }
 
-        let result = CursorTrack(samples: samples, clickSamples: clickSamples)
-        logger.info(
-            "cursor tracking stopped: samples=\(result.samples.count, privacy: .public) clicks=\(result.clickSamples.count, privacy: .public) usable=\(result.isUsableForAutoZoom, privacy: .public)"
+        let result = CursorTrack(
+            samples: samples,
+            clickSamples: clickSamples,
+            cameraControlEvents: cameraControlEvents
         )
-        return result.isUsableForAutoZoom || result.hasClicks ? result : nil
+        logger.info(
+            "cursor tracking stopped: samples=\(result.samples.count, privacy: .public) clicks=\(result.clickSamples.count, privacy: .public) cameraEvents=\(result.cameraControlEvents.count, privacy: .public) usable=\(result.isUsableForAutoZoom, privacy: .public)"
+        )
+        return result.isUsableForAutoZoom || result.hasClicks || result.hasManualCameraEvents ? result : nil
     }
 
     private func captureSample() {
@@ -104,6 +116,24 @@ final class CursorTrackingService {
         }
     }
 
+    private func installCameraHotKeysIfNeeded() {
+        guard cameraControlStyle == .manualHotkeys else {
+            return
+        }
+
+        cameraHotKeyManager.onAction = { [weak self] action in
+            Task { @MainActor [weak self] in
+                self?.captureCameraControl(action)
+            }
+        }
+        cameraHotKeyManager.register()
+    }
+
+    private func removeCameraHotKeys() {
+        cameraHotKeyManager.onAction = nil
+        cameraHotKeyManager.unregister()
+    }
+
     private func removeGlobalMouseMonitor() {
         if let globalMouseMonitor {
             NSEvent.removeMonitor(globalMouseMonitor)
@@ -133,6 +163,46 @@ final class CursorTrackingService {
                 normalizedLocation: normalizedLocation
             )
         )
+    }
+
+    private func captureCameraControl(_ action: RecordingCameraHotKeyAction) {
+        guard let startedAt else {
+            return
+        }
+
+        let timestamp = ProcessInfo.processInfo.systemUptime - startedAt
+        let actionEvent = CameraControlEvent(
+            time: timestamp,
+            action: cameraAction(for: action),
+            normalizedLocation: currentNormalizedLocation()
+        )
+        cameraControlEvents.append(actionEvent)
+        logger.info(
+            "captured camera control: action=\(actionEvent.action.rawValue, privacy: .public) time=\(timestamp, privacy: .public)"
+        )
+    }
+
+    private func currentNormalizedLocation() -> CGPoint? {
+        if let trackingRect, trackingRect.contains(NSEvent.mouseLocation) {
+            let location = NSEvent.mouseLocation
+            return CGPoint(
+                x: (location.x - trackingRect.minX) / trackingRect.width,
+                y: (location.y - trackingRect.minY) / trackingRect.height
+            )
+        }
+
+        return samples.last?.normalizedLocation
+    }
+
+    private func cameraAction(for action: RecordingCameraHotKeyAction) -> CameraControlAction {
+        switch action {
+        case .toggleSpotlight:
+            .toggleSpotlight
+        case .toggleFollow:
+            .toggleFollow
+        case .resetOverview:
+            .resetOverview
+        }
     }
 
     private func rectDescription(_ rect: CGRect) -> String {

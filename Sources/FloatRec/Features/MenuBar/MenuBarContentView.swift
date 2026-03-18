@@ -95,7 +95,9 @@ struct MenuBarContentView: View {
 
             HStack {
                 Label(
-                    appModel.featureFlags.isAutoZoomEnabled ? "자동 줌 켜짐" : "자동 줌 꺼짐",
+                    appModel.featureFlags.isAutoZoomEnabled
+                        ? (appModel.featureFlags.cameraControlStyle == .automatic ? "자동 줌 켜짐" : "수동 카메라 켜짐")
+                        : "카메라 후처리 꺼짐",
                     systemImage: "scope"
                 )
                 .font(.caption)
@@ -112,6 +114,10 @@ struct MenuBarContentView: View {
 
                 Spacer()
             }
+
+            Text(appModel.cameraControlSummary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
 
             if let installMessage = appModel.installRecommendationMessage {
                 VStack(alignment: .leading, spacing: 8) {

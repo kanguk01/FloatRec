@@ -111,6 +111,15 @@ final class AppModel: ObservableObject {
         permissionService.runtimeInstallIssue()?.guidanceText
     }
 
+    var cameraControlSummary: String {
+        switch featureFlags.cameraControlStyle {
+        case .automatic:
+            "자동 추적으로 확대와 이동을 계산합니다."
+        case .manualHotkeys:
+            "녹화 중 ⌥⌘1 줌 · ⌥⌘2 따라가기 · ⌥⌘0 전체화면"
+        }
+    }
+
     var shouldRecommendApplicationsInstall: Bool {
         installRecommendationMessage != nil
     }
@@ -218,6 +227,7 @@ final class AppModel: ObservableObject {
                 areaSelection: areaSelection,
                 isAutoZoomEnabled: featureFlags.isAutoZoomEnabled,
                 isClickHighlightEnabled: featureFlags.isClickHighlightEnabled,
+                cameraControlStyle: featureFlags.cameraControlStyle,
                 fallbackSourceLabel: currentSourceLabel
             )
             recordingState = .recording(startedAt: .now)

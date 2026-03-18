@@ -18,13 +18,25 @@ struct SettingsView: View {
 
             Toggle(isOn: $appModel.featureFlags.isAutoZoomEnabled) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("커서 따라가는 자동 줌")
-                    Text("녹화 종료 후 커서를 중심으로 부드럽게 확대된 결과물을 만듭니다.")
+                    Text("카메라 후처리")
+                    Text("자동 추적 또는 수동 키 제어로 확대/이동이 적용된 결과물을 만듭니다.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             .toggleStyle(.switch)
+
+            Picker("카메라 제어 방식", selection: $appModel.featureFlags.cameraControlStyle) {
+                ForEach(CameraControlStyle.allCases) { style in
+                    Text(style.title).tag(style)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(!appModel.featureFlags.isAutoZoomEnabled)
+
+            Text(appModel.cameraControlSummary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             Toggle(isOn: $appModel.featureFlags.isClickHighlightEnabled) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -41,7 +53,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("다음 단계")
                     .font(.headline)
-                Text("윈도우 모드 후처리, Shelf 썸네일 미리보기, 공유 카드 고도화를 다음 단계로 연결할 예정입니다.")
+                Text("수동 카메라 키 흐름과 자동 추적 흐름을 더 자연스럽게 다듬는 작업이 다음 단계입니다.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

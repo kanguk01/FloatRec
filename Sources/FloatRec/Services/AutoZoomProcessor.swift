@@ -24,14 +24,43 @@ enum AutoZoomProcessorError: LocalizedError {
     }
 }
 
+private struct CameraFrameConfiguration {
+    let focusPoint: CGPoint?
+    let zoomFactor: CGFloat
+
+    static let overview = CameraFrameConfiguration(focusPoint: nil, zoomFactor: 1)
+
+    var hasZoom: Bool {
+        zoomFactor > 1.001 && focusPoint != nil
+    }
+}
+
+private enum ManualCameraState {
+    case overview
+    case spotlight(CGPoint)
+    case follow
+}
+
 actor AutoZoomProcessor {
     func process(
         _ artifact: RecordingArtifact,
         isAutoZoomEnabled: Bool,
-        isClickHighlightEnabled: Bool
+        isClickHighlightEnabled: Bool,
+        cameraControlStyle: CameraControlStyle
     ) async throws -> RecordingArtifact {
-        guard let cursorTrack = artifact.cursorTrack,
-              cursorTrack.isUsableForAutoZoom || cursorTrack.hasClicks else {
+        guard let cursorTrack = artifact.cursorTrack else {
+            return artifact
+        }
+
+        let shouldApplyCamera: Bool
+        switch cameraControlStyle {
+        case .automatic:
+            shouldApplyCamera = isAutoZoomEnabled && cursorTrack.isUsableForAutoZoom
+        case .manualHotkeys:
+            shouldApplyCamera = isAutoZoomEnabled && cursorTrack.hasManualCameraEvents
+        }
+
+        guard shouldApplyCamera || cursorTrack.hasClicks else {
             return artifact
         }
 
@@ -51,7 +80,8 @@ actor AutoZoomProcessor {
                 renderSize: renderSize,
                 cursorTrack: cursorTrack,
                 isAutoZoomEnabled: isAutoZoomEnabled,
-                isClickHighlightEnabled: isClickHighlightEnabled
+                isClickHighlightEnabled: isClickHighlightEnabled,
+                cameraControlStyle: cameraControlStyle
             )
             request.finish(with: outputImage, context: nil)
         }
@@ -77,7 +107,8 @@ actor AutoZoomProcessor {
             sourceLabel: processedLabel(
                 base: artifact.sourceLabel,
                 isAutoZoomEnabled: isAutoZoomEnabled,
-                isClickHighlightEnabled: isClickHighlightEnabled
+                isClickHighlightEnabled: isClickHighlightEnabled,
+                cameraControlStyle: cameraControlStyle
             ),
             cursorTrack: cursorTrack
         )
@@ -114,7 +145,8 @@ actor AutoZoomProcessor {
         renderSize: CGSize,
         cursorTrack: CursorTrack,
         isAutoZoomEnabled: Bool,
-        isClickHighlightEnabled: Bool
+        isClickHighlightEnabled: Bool,
+        cameraControlStyle: CameraControlStyle
     ) -> CIImage {
         let sourceImage = request.sourceImage
         let sourceExtent = sourceImage.extent
@@ -122,9 +154,15 @@ actor AutoZoomProcessor {
         let baseImage: CIImage
         let activeCropRect: CGRect?
 
-        if isAutoZoomEnabled, cursorTrack.isUsableForAutoZoom {
-            let focusPoint = cameraPoint(at: currentTime, samples: cursorTrack.samples)
-            let zoomFactor = zoomFactor(at: currentTime, samples: cursorTrack.samples)
+        let cameraConfiguration = cameraConfiguration(
+            at: currentTime,
+            cursorTrack: cursorTrack,
+            isAutoZoomEnabled: isAutoZoomEnabled,
+            cameraControlStyle: cameraControlStyle
+        )
+
+        if cameraConfiguration.hasZoom, let focusPoint = cameraConfiguration.focusPoint {
+            let zoomFactor = cameraConfiguration.zoomFactor
             let cropSize = CGSize(
                 width: sourceExtent.width / zoomFactor,
                 height: sourceExtent.height / zoomFactor
@@ -180,6 +218,85 @@ actor AutoZoomProcessor {
         return rippleImage.composited(over: baseImage)
     }
 
+    private static func cameraConfiguration(
+        at time: TimeInterval,
+        cursorTrack: CursorTrack,
+        isAutoZoomEnabled: Bool,
+        cameraControlStyle: CameraControlStyle
+    ) -> CameraFrameConfiguration {
+        guard isAutoZoomEnabled else {
+            return .overview
+        }
+
+        switch cameraControlStyle {
+        case .automatic:
+            guard cursorTrack.isUsableForAutoZoom else {
+                return .overview
+            }
+
+            return CameraFrameConfiguration(
+                focusPoint: cameraPoint(at: time, samples: cursorTrack.samples),
+                zoomFactor: zoomFactor(at: time, samples: cursorTrack.samples)
+            )
+        case .manualHotkeys:
+            return manualCameraConfiguration(at: time, cursorTrack: cursorTrack)
+        }
+    }
+
+    private static func manualCameraConfiguration(
+        at time: TimeInterval,
+        cursorTrack: CursorTrack
+    ) -> CameraFrameConfiguration {
+        switch manualCameraState(at: time, cursorTrack: cursorTrack) {
+        case .overview:
+            return .overview
+        case let .spotlight(point):
+            return CameraFrameConfiguration(
+                focusPoint: stabilizedManualPoint(point),
+                zoomFactor: 1.28
+            )
+        case .follow:
+            guard cursorTrack.isUsableForAutoZoom else {
+                return .overview
+            }
+
+            return CameraFrameConfiguration(
+                focusPoint: manualFollowPoint(at: time, samples: cursorTrack.samples),
+                zoomFactor: 1.18
+            )
+        }
+    }
+
+    private static func manualCameraState(
+        at time: TimeInterval,
+        cursorTrack: CursorTrack
+    ) -> ManualCameraState {
+        var state: ManualCameraState = .overview
+
+        for event in cursorTrack.cameraControlEvents where event.time <= time {
+            switch event.action {
+            case .toggleSpotlight:
+                switch state {
+                case .spotlight:
+                    state = .overview
+                case .overview, .follow:
+                    state = .spotlight(event.normalizedLocation ?? interpolatedPoint(at: event.time, samples: cursorTrack.samples))
+                }
+            case .toggleFollow:
+                switch state {
+                case .follow:
+                    state = .overview
+                case .overview, .spotlight:
+                    state = .follow
+                }
+            case .resetOverview:
+                state = .overview
+            }
+        }
+
+        return state
+    }
+
     private static func cameraPoint(at time: TimeInterval, samples: [CursorTrackSample]) -> CGPoint {
         let current = interpolatedPoint(at: time, samples: samples)
         let trailing1 = interpolatedPoint(at: max(time - 0.14, 0), samples: samples)
@@ -195,6 +312,22 @@ actor AutoZoomProcessor {
         return CGPoint(
             x: 0.5 + stabilizedOffset(smoothed.x - 0.5, deadZone: 0.032, response: 0.78, maxOffset: 0.30),
             y: 0.5 + stabilizedOffset(smoothed.y - 0.5, deadZone: 0.028, response: 0.78, maxOffset: 0.28)
+        )
+    }
+
+    private static func manualFollowPoint(at time: TimeInterval, samples: [CursorTrackSample]) -> CGPoint {
+        let current = interpolatedPoint(at: time, samples: samples)
+        let trailing1 = interpolatedPoint(at: max(time - 0.08, 0), samples: samples)
+        let trailing2 = interpolatedPoint(at: max(time - 0.18, 0), samples: samples)
+
+        let smoothed = CGPoint(
+            x: current.x * 0.48 + trailing1.x * 0.32 + trailing2.x * 0.20,
+            y: current.y * 0.48 + trailing1.y * 0.32 + trailing2.y * 0.20
+        )
+
+        return CGPoint(
+            x: 0.5 + stabilizedOffset(smoothed.x - 0.5, deadZone: 0.014, response: 0.96, maxOffset: 0.34),
+            y: 0.5 + stabilizedOffset(smoothed.y - 0.5, deadZone: 0.012, response: 0.96, maxOffset: 0.32)
         )
     }
 
@@ -272,6 +405,13 @@ actor AutoZoomProcessor {
         return sqrt(dx * dx + dy * dy)
     }
 
+    private static func stabilizedManualPoint(_ point: CGPoint) -> CGPoint {
+        CGPoint(
+            x: clamp(point.x, min: 0.14, max: 0.86),
+            y: clamp(point.y, min: 0.14, max: 0.86)
+        )
+    }
+
     private static func rippleOverlay(
         at time: TimeInterval,
         renderSize: CGSize,
@@ -340,14 +480,15 @@ actor AutoZoomProcessor {
     private func processedLabel(
         base: String,
         isAutoZoomEnabled: Bool,
-        isClickHighlightEnabled: Bool
+        isClickHighlightEnabled: Bool,
+        cameraControlStyle: CameraControlStyle
     ) -> String {
         if isAutoZoomEnabled && isClickHighlightEnabled {
-            return "\(base) · 자동 줌 · 클릭 강조"
+            return "\(base) · \(cameraControlStyle == .automatic ? "자동 줌" : "수동 카메라") · 클릭 강조"
         }
 
         if isAutoZoomEnabled {
-            return "\(base) · 자동 줌"
+            return "\(base) · \(cameraControlStyle == .automatic ? "자동 줌" : "수동 카메라")"
         }
 
         if isClickHighlightEnabled {
