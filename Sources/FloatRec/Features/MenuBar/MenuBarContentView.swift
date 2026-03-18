@@ -33,6 +33,7 @@ struct MenuBarContentView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .disabled(appModel.recordingState.isBusy || appModel.isRefreshingSources)
 
                 Text(appModel.captureMode.helperText)
                     .font(.caption)
@@ -63,6 +64,7 @@ struct MenuBarContentView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(appModel.recordingState.isBusy || appModel.isRefreshingSources)
 
                         HStack {
                             if let selectedSource = appModel.selectedSourceOption {
@@ -84,7 +86,7 @@ struct MenuBarContentView: View {
                                 }
                             }
                             .font(.caption)
-                            .disabled(appModel.isRefreshingSources)
+                            .disabled(appModel.recordingState.isBusy || appModel.isRefreshingSources)
                         }
                     }
                     .padding(10)
@@ -118,6 +120,12 @@ struct MenuBarContentView: View {
             Text(appModel.cameraControlSummary)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+
+            if appModel.isRefreshingSources {
+                Text("캡처 소스를 다시 불러오는 중입니다.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
             if let installMessage = appModel.installRecommendationMessage {
                 VStack(alignment: .leading, spacing: 8) {

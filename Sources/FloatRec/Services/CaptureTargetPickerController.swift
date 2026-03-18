@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 @preconcurrency import ScreenCaptureKit
 
 @MainActor
@@ -26,10 +27,13 @@ final class CaptureTargetPickerController: NSObject {
             return
         }
 
+        NSApp.activate(ignoringOtherApps: true)
+
         var configuration = picker.defaultConfiguration
         configuration.allowedPickerModes = allowedModes(for: mode)
         configuration.allowsChangingSelectedContent = false
         picker.defaultConfiguration = configuration
+        picker.isActive = false
         picker.isActive = true
         picker.present(using: contentStyle(for: mode))
     }

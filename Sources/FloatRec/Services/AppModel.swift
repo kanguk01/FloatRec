@@ -285,7 +285,18 @@ final class AppModel: ObservableObject {
             return
         }
 
+        guard !recordingState.isBusy else {
+            lastErrorMessage = "준비 중이거나 후처리 중일 때는 캡처 대상을 바꿀 수 없습니다."
+            return
+        }
+
+        guard !isRefreshingSources else {
+            lastErrorMessage = "캡처 소스를 불러오는 중입니다. 잠시 뒤 다시 시도해 주세요."
+            return
+        }
+
         lastErrorMessage = nil
+        logger.info("presenting capture target picker for mode=\(self.captureMode.title, privacy: .public)")
         captureTargetPickerController.present(for: captureMode)
     }
 

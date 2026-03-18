@@ -28,7 +28,7 @@ enum RecordingState {
         case .idle:
             "대기 중"
         case .requestingPermission:
-            "권한 확인 중"
+            "준비 중"
         case .recording:
             "녹화 중"
         case .processing:
@@ -43,7 +43,7 @@ enum RecordingState {
         case .recording:
             "녹화 종료"
         case .requestingPermission, .processing:
-            "작업 중"
+            "준비 중"
         }
     }
 

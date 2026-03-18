@@ -3,6 +3,25 @@ import Foundation
 import OSLog
 import ScreenCaptureKit
 
+private enum SourceCatalogError: LocalizedError {
+    case timedOut
+
+    var errorDescription: String? {
+        switch self {
+        case .timedOut:
+            "캡처 소스 목록을 불러오는 시간이 너무 오래 걸렸습니다. 다시 시도해 주세요."
+        }
+    }
+}
+
+private final class ShareableContentBox: @unchecked Sendable {
+    let content: SCShareableContent
+
+    init(_ content: SCShareableContent) {
+        self.content = content
+    }
+}
+
 enum ResolvedCaptureSource {
     case display(SCDisplay, sourceLabel: String)
     case window(SCWindow, sourceLabel: String)
@@ -77,15 +96,13 @@ final class ScreenCaptureSourceCatalog {
     private let logger = Logger(subsystem: "dev.floatrec.app", category: "source-catalog")
     private var displaySourcesByID: [String: SCDisplay] = [:]
     private var windowSourcesByID: [String: SCWindow] = [:]
+    private let snapshotTimeout: Duration = .seconds(5)
 
     func loadSnapshot() async throws -> CaptureSourceSnapshot {
         logger.info("loading shareable content snapshot")
         let shareableContent: SCShareableContent
         do {
-            shareableContent = try await SCShareableContent.excludingDesktopWindows(
-                false,
-                onScreenWindowsOnly: true
-            )
+            shareableContent = try await loadShareableContentWithTimeout()
         } catch {
             logger.error("failed loading shareable content: \(error.localizedDescription, privacy: .public)")
             throw error
@@ -126,6 +143,28 @@ final class ScreenCaptureSourceCatalog {
         )
 
         return CaptureSourceSnapshot(displays: displays, windows: windows)
+    }
+
+    private func loadShareableContentWithTimeout() async throws -> SCShareableContent {
+        try await withThrowingTaskGroup(of: ShareableContentBox.self) { group in
+            group.addTask {
+                let content = try await SCShareableContent.excludingDesktopWindows(
+                    false,
+                    onScreenWindowsOnly: true
+                )
+                return ShareableContentBox(content)
+            }
+            group.addTask { [snapshotTimeout] in
+                try await Task.sleep(for: snapshotTimeout)
+                throw SourceCatalogError.timedOut
+            }
+
+            let result = try await group.next() ?? {
+                throw SourceCatalogError.timedOut
+            }()
+            group.cancelAll()
+            return result.content
+        }
     }
 
     func resolveSource(mode: CaptureMode, selectedSourceID: String?) async throws -> ResolvedCaptureSource? {
