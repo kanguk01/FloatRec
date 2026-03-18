@@ -48,6 +48,8 @@ enum RecordingCameraHotKeyAction: UInt32, CaseIterable {
 }
 
 final class RecordingCameraHotKeyManager {
+    private static let hotKeySignature = OSType(0x46524343)
+
     var onAction: ((RecordingCameraHotKeyAction) -> Void)?
 
     private var hotKeyRefs: [RecordingCameraHotKeyAction: EventHotKeyRef] = [:]
@@ -64,7 +66,7 @@ final class RecordingCameraHotKeyManager {
 
         for action in RecordingCameraHotKeyAction.allCases {
             var hotKeyRef: EventHotKeyRef?
-            let hotKeyID = EventHotKeyID(signature: OSType(0x46524343), id: action.rawValue)
+            let hotKeyID = EventHotKeyID(signature: Self.hotKeySignature, id: action.rawValue)
             RegisterEventHotKey(
                 action.keyCode,
                 UInt32(controlKey),
@@ -120,6 +122,7 @@ final class RecordingCameraHotKeyManager {
                 )
 
                 guard status == noErr,
+                      hotKeyID.signature == RecordingCameraHotKeyManager.hotKeySignature,
                       let action = RecordingCameraHotKeyAction(rawValue: hotKeyID.id) else {
                     return noErr
                 }

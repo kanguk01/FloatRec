@@ -25,6 +25,8 @@ enum GlobalHotKeyAction: UInt32, CaseIterable {
 }
 
 final class GlobalHotKeyManager {
+    private static let hotKeySignature = OSType(0x46524331)
+
     var onAction: ((GlobalHotKeyAction) -> Void)?
 
     private var hotKeyRefs: [GlobalHotKeyAction: EventHotKeyRef] = [:]
@@ -41,7 +43,7 @@ final class GlobalHotKeyManager {
 
         for action in GlobalHotKeyAction.allCases {
             var hotKeyRef: EventHotKeyRef?
-            let hotKeyID = EventHotKeyID(signature: OSType(0x46524331), id: action.rawValue)
+            let hotKeyID = EventHotKeyID(signature: Self.hotKeySignature, id: action.rawValue)
 
             RegisterEventHotKey(
                 action.keyCode,
@@ -94,6 +96,7 @@ final class GlobalHotKeyManager {
                 )
 
                 guard status == noErr,
+                      hotKeyID.signature == GlobalHotKeyManager.hotKeySignature,
                       let action = GlobalHotKeyAction(rawValue: hotKeyID.id) else {
                     return noErr
                 }

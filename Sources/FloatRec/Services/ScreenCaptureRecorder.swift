@@ -113,9 +113,11 @@ final class ScreenCaptureRecorder: NSObject {
         self.outputURL = nil
         self.pendingRecordingDidFinishResult = nil
 
+        let actualDuration = await resolvedDuration(for: outputURL, fallback: durationFallback)
+
         return RecordingArtifact(
             fileURL: outputURL,
-            duration: max(durationFallback, 1),
+            duration: actualDuration,
             sourceLabel: sourceLabel ?? "실녹화",
             cursorTrack: nil
         )
@@ -241,6 +243,20 @@ final class ScreenCaptureRecorder: NSObject {
         )
         try FileManager.default.createDirectory(at: clipsDirectory, withIntermediateDirectories: true)
         return clipsDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("mp4")
+    }
+
+    private func resolvedDuration(for outputURL: URL, fallback: TimeInterval) async -> TimeInterval {
+        let asset = AVURLAsset(url: outputURL)
+
+        do {
+            let duration = try await asset.load(.duration).seconds
+            guard duration.isFinite, duration > 0 else {
+                return max(fallback, 1)
+            }
+            return max(duration, fallback, 1)
+        } catch {
+            return max(fallback, 1)
+        }
     }
 
     private func handleRecordingDidStart() {
