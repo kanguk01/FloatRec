@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class RecordingCameraHUDController {
     private var panel: NSPanel?
+    private var cardView: NSView?
     private var titleLabel: NSTextField?
     private var detailLabel: NSTextField?
     private var hideTask: Task<Void, Never>?
@@ -59,7 +60,7 @@ final class RecordingCameraHUDController {
         }
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 88),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 104),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -71,34 +72,45 @@ final class RecordingCameraHUDController {
         panel.isOpaque = false
         panel.hasShadow = true
         panel.ignoresMouseEvents = true
+        panel.sharingType = .none
 
-        let visualEffectView = NSVisualEffectView(frame: panel.contentView?.bounds ?? .zero)
-        visualEffectView.autoresizingMask = [.width, .height]
-        visualEffectView.material = .hudWindow
-        visualEffectView.state = .active
-        visualEffectView.wantsLayer = true
-        visualEffectView.layer?.cornerRadius = 18
-        visualEffectView.layer?.masksToBounds = true
+        let rootView = NSView(frame: panel.contentView?.bounds ?? .zero)
+        rootView.autoresizingMask = [.width, .height]
+        rootView.wantsLayer = true
+        rootView.layer?.backgroundColor = NSColor.clear.cgColor
+
+        let cardView = NSView(frame: rootView.bounds)
+        cardView.autoresizingMask = [.width, .height]
+        cardView.wantsLayer = true
+        cardView.layer?.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 0.92).cgColor
+        cardView.layer?.cornerRadius = 22
+        cardView.layer?.borderWidth = 1
+        cardView.layer?.borderColor = NSColor(calibratedRed: 0.35, green: 0.84, blue: 0.98, alpha: 0.55).cgColor
+        rootView.addSubview(cardView)
 
         let titleLabel = NSTextField(labelWithString: "")
-        titleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 24, weight: .bold)
         titleLabel.textColor = .white
+        titleLabel.lineBreakMode = .byTruncatingTail
 
         let detailLabel = NSTextField(labelWithString: "")
-        detailLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        detailLabel.textColor = NSColor.white.withAlphaComponent(0.82)
+        detailLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        detailLabel.textColor = NSColor(calibratedRed: 0.70, green: 0.92, blue: 1.0, alpha: 0.98)
+        detailLabel.lineBreakMode = .byWordWrapping
 
         let stack = NSStackView(views: [titleLabel, detailLabel])
         stack.orientation = .vertical
-        stack.spacing = 6
-        stack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
-        stack.frame = visualEffectView.bounds
+        stack.spacing = 8
+        stack.edgeInsets = NSEdgeInsets(top: 18, left: 22, bottom: 18, right: 22)
+        stack.frame = cardView.bounds
         stack.autoresizingMask = [.width, .height]
+        stack.alignment = .leading
 
-        visualEffectView.addSubview(stack)
-        panel.contentView = visualEffectView
+        cardView.addSubview(stack)
+        panel.contentView = rootView
 
         self.panel = panel
+        self.cardView = cardView
         self.titleLabel = titleLabel
         self.detailLabel = detailLabel
         return panel

@@ -239,19 +239,33 @@ final class CursorTrackingService {
 
     private func showCameraFeedback(for action: RecordingCameraHotKeyAction, mode: PreviewCameraMode) {
         let title: String
+        let detail: String
 
-        switch mode {
-        case .overview:
-            title = "전체 화면"
-        case .spotlight:
-            title = "현재 위치 줌"
-        case .follow:
-            title = "커서 따라가기"
+        switch action {
+        case .toggleSpotlight:
+            if case .spotlight = mode {
+                title = "줌 켜짐"
+                detail = "현재 커서 위치로 부드럽게 확대합니다 · \(action.displayString)"
+            } else {
+                title = "줌 꺼짐"
+                detail = "전체 화면 보기로 돌아갑니다 · \(action.displayString)"
+            }
+        case .toggleFollow:
+            if case .follow = mode {
+                title = "따라가기 켜짐"
+                detail = "커서 이동을 계속 따라갑니다 · \(action.displayString)"
+            } else {
+                title = "따라가기 꺼짐"
+                detail = "현재 카메라 추적을 멈춥니다 · \(action.displayString)"
+            }
+        case .resetOverview:
+            title = "전체 화면 복귀"
+            detail = "카메라를 기본 시야로 되돌립니다 · \(action.displayString)"
         }
 
         cameraHUDController.showState(
             title: title,
-            detail: "단축키 \(action.displayString)"
+            detail: detail
         )
     }
 }
