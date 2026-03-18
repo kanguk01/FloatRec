@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import OSLog
 import ScreenCaptureKit
@@ -37,19 +38,37 @@ enum ResolvedCaptureSource {
     }
 
     var autoZoomTrackingRect: CGRect? {
+        let screenCaptureRect: CGRect
+
         switch self {
         case let .display(display, _):
-            display.frame
+            screenCaptureRect = display.frame
         case let .window(window, _):
-            window.frame
+            screenCaptureRect = window.frame
         case let .area(display, sourceRect, _):
-            CGRect(
+            screenCaptureRect = CGRect(
                 x: display.frame.minX + sourceRect.minX,
                 y: display.frame.minY + sourceRect.minY,
                 width: sourceRect.width,
                 height: sourceRect.height
             )
         }
+
+        return Self.appKitGlobalRect(from: screenCaptureRect)
+    }
+
+    private static func appKitGlobalRect(from screenCaptureRect: CGRect) -> CGRect {
+        let referenceTop = NSScreen.screens
+            .first(where: { $0.frame.origin == .zero })?
+            .frame
+            .maxY ?? NSScreen.main?.frame.maxY ?? screenCaptureRect.maxY
+
+        return CGRect(
+            x: screenCaptureRect.minX,
+            y: referenceTop - screenCaptureRect.maxY,
+            width: screenCaptureRect.width,
+            height: screenCaptureRect.height
+        )
     }
 }
 
