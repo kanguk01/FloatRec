@@ -324,6 +324,7 @@ final class AppModel: ObservableObject {
                 cameraControlStyle: featureFlags.cameraControlStyle,
                 isSystemAudioEnabled: featureFlags.isSystemAudioEnabled,
                 isMicrophoneEnabled: featureFlags.isMicrophoneEnabled,
+                isLivePreviewEnabled: featureFlags.isLivePreviewEnabled,
                 fallbackSourceLabel: currentSourceLabel
             )
             recordingState = .recording(startedAt: .now)

@@ -75,6 +75,17 @@ struct MenuBarContentView: View {
                     }
                     .toggleStyle(.switch)
                     .disabled(appModel.recordingState.isRecording || appModel.recordingState.isPaused || appModel.recordingState.isBusy)
+
+                    Toggle(isOn: $appModel.featureFlags.isLivePreviewEnabled) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("실시간 프리뷰")
+                            Text("녹화 중 줌, 스포트라이트 효과를 화면에 미리 표시합니다.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .disabled(appModel.recordingState.isRecording || appModel.recordingState.isPaused || appModel.recordingState.isBusy)
                 }
             }
 

@@ -8,6 +8,7 @@ struct RecordingFeatureFlags {
     private static let autoSavePathKey = "featureFlags.autoSavePath"
     private static let systemAudioKey = "featureFlags.isSystemAudioEnabled"
     private static let microphoneKey = "featureFlags.isMicrophoneEnabled"
+    private static let livePreviewKey = "featureFlags.isLivePreviewEnabled"
 
     var isAutoZoomEnabled: Bool {
         didSet { UserDefaults.standard.set(isAutoZoomEnabled, forKey: Self.autoZoomKey) }
@@ -31,6 +32,10 @@ struct RecordingFeatureFlags {
 
     var isMicrophoneEnabled: Bool {
         didSet { UserDefaults.standard.set(isMicrophoneEnabled, forKey: Self.microphoneKey) }
+    }
+
+    var isLivePreviewEnabled: Bool {
+        didSet { UserDefaults.standard.set(isLivePreviewEnabled, forKey: Self.livePreviewKey) }
     }
 
     var autoSavePath: String? {
@@ -84,6 +89,12 @@ struct RecordingFeatureFlags {
             isMicrophoneEnabled = defaults.bool(forKey: Self.microphoneKey)
         } else {
             isMicrophoneEnabled = false
+        }
+
+        if defaults.object(forKey: Self.livePreviewKey) != nil {
+            isLivePreviewEnabled = defaults.bool(forKey: Self.livePreviewKey)
+        } else {
+            isLivePreviewEnabled = true
         }
 
         autoSavePath = defaults.string(forKey: Self.autoSavePathKey)

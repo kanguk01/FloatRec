@@ -9,6 +9,8 @@ final class CursorTrackingService {
     private let logger = Logger(subsystem: "dev.floatrec.app", category: "cursor-tracking")
     private let cameraHotKeyManager = RecordingCameraHotKeyManager()
     private var statusHUD: RecordingStatusHUDController { RecordingStatusHUDController.shared }
+    private let previewOverlay = CameraPreviewOverlayController()
+    private var isLivePreviewEnabled = false
     private var trackingTask: Task<Void, Never>?
     private var globalMouseMonitor: Any?
     private var startedAt: TimeInterval?
@@ -18,15 +20,18 @@ final class CursorTrackingService {
     private var cameraControlEvents: [CameraControlEvent] = []
     private var cameraControlStyle: CameraControlStyle = .manualHotkeys
     private var previewCameraState = PreviewCameraState.overview
+    private var zoomAnchorInView: CGPoint?
 
     func startTracking(
         for source: ResolvedCaptureSource,
         enabled: Bool,
         cameraControlStyle: CameraControlStyle,
-        defaultManualSpotlightEnabled: Bool
+        defaultManualSpotlightEnabled: Bool,
+        isLivePreviewEnabled: Bool = false
     ) {
         _ = stopTracking()
         self.cameraControlStyle = cameraControlStyle
+        self.isLivePreviewEnabled = isLivePreviewEnabled
         self.previewCameraState = PreviewCameraState(
             mode: .overview,
             zoomStep: 0,
@@ -47,6 +52,10 @@ final class CursorTrackingService {
         installGlobalMouseMonitor()
         installCameraHotKeysIfNeeded()
 
+        if isLivePreviewEnabled {
+            previewOverlay.show(trackingRect: trackingRect)
+        }
+
         trackingTask = Task { [weak self] in
             while !Task.isCancelled {
                 await MainActor.run {
@@ -65,6 +74,7 @@ final class CursorTrackingService {
         removeGlobalMouseMonitor()
         removeCameraHotKeys()
         statusHUD.clearCameraStatus()
+        previewOverlay.hide()
 
         defer {
             startedAt = nil
@@ -74,6 +84,8 @@ final class CursorTrackingService {
             cameraControlEvents.removeAll()
             cameraControlStyle = .manualHotkeys
             previewCameraState = .overview
+            zoomAnchorInView = nil
+            isLivePreviewEnabled = false
         }
 
         let result = CursorTrack(
@@ -194,7 +206,19 @@ final class CursorTrackingService {
             normalizedLocation: currentNormalizedLocation()
         )
         cameraControlEvents.append(actionEvent)
+        let previousZoomStep = previewCameraState.zoomStep
         previewCameraState = nextPreviewState(for: action)
+
+        if previousZoomStep == 0 && previewCameraState.zoomStep > 0 {
+            zoomAnchorInView = cursorLocationInTrackingView()
+        }
+        if previewCameraState.mode == .overview {
+            zoomAnchorInView = nil
+        }
+        if action == .toggleFollow {
+            zoomAnchorInView = cursorLocationInTrackingView()
+        }
+
         refreshCameraHUD()
         logger.info(
             "captured camera control: action=\(actionEvent.action.rawValue, privacy: .public) time=\(timestamp, privacy: .public)"
@@ -267,10 +291,31 @@ final class CursorTrackingService {
         }
     }
 
+    private func cursorLocationInTrackingView() -> CGPoint? {
+        guard let trackingRect else { return nil }
+        let global = NSEvent.mouseLocation
+        return CGPoint(
+            x: global.x - trackingRect.origin.x,
+            y: global.y - trackingRect.origin.y
+        )
+    }
+
     private func refreshCameraHUD() {
         let title = hudTitle(for: previewCameraState)
         let detail = hudDetail(for: previewCameraState)
         statusHUD.updateCameraStatus("\(title) · \(detail)")
+
+        if isLivePreviewEnabled {
+            previewOverlay.update(
+                state: CameraPreviewState(
+                    zoomStep: previewCameraState.zoomStep,
+                    isFollowing: previewCameraState.mode == .follow,
+                    isSpotlightEnabled: previewCameraState.isSpotlightEnabled,
+                    anchorPoint: zoomAnchorInView
+                ),
+                cursorLocation: NSEvent.mouseLocation
+            )
+        }
     }
 
     private func hudTitle(for state: PreviewCameraState) -> String {

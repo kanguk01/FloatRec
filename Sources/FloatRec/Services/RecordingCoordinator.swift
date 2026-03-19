@@ -17,6 +17,7 @@ final class RecordingCoordinator {
     private var cameraControlStyle: CameraControlStyle = .manualHotkeys
     private var isSystemAudioEnabled = false
     private var isMicrophoneEnabled = false
+    private var isLivePreviewEnabled = true
 
     init(
         sourceCatalog: ScreenCaptureSourceCatalog,
@@ -50,6 +51,7 @@ final class RecordingCoordinator {
         cameraControlStyle: CameraControlStyle,
         isSystemAudioEnabled: Bool,
         isMicrophoneEnabled: Bool,
+        isLivePreviewEnabled: Bool,
         fallbackSourceLabel: String
     ) async throws {
         self.isAutoZoomEnabled = isAutoZoomEnabled
@@ -58,6 +60,7 @@ final class RecordingCoordinator {
         self.cameraControlStyle = cameraControlStyle
         self.isSystemAudioEnabled = isSystemAudioEnabled
         self.isMicrophoneEnabled = isMicrophoneEnabled
+        self.isLivePreviewEnabled = isLivePreviewEnabled
         segments.removeAll()
         if #available(macOS 15.0, *) {
             let resolvedSource: ResolvedCaptureSource?
@@ -97,7 +100,8 @@ final class RecordingCoordinator {
                         for: resolvedSource,
                         enabled: needsPostProcessing,
                         cameraControlStyle: cameraControlStyle,
-                        defaultManualSpotlightEnabled: defaultManualSpotlightEnabled
+                        defaultManualSpotlightEnabled: defaultManualSpotlightEnabled,
+                        isLivePreviewEnabled: isLivePreviewEnabled
                     )
                     liveRecorder = recorder
                     return
@@ -194,7 +198,8 @@ final class RecordingCoordinator {
                 for: resolvedSource,
                 enabled: needsTracking,
                 cameraControlStyle: cameraControlStyle,
-                defaultManualSpotlightEnabled: defaultManualSpotlightEnabled
+                defaultManualSpotlightEnabled: defaultManualSpotlightEnabled,
+                isLivePreviewEnabled: isLivePreviewEnabled
             )
             logger.info("recording resumed")
         }
