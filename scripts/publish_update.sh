@@ -1,11 +1,12 @@
 #!/bin/bash
 # FloatRec 업데이트 배포 스크립트
-# Usage: ./scripts/publish_update.sh <version>
+# Usage: ./scripts/publish_update.sh <version> [release-notes-file]
 # Example: ./scripts/publish_update.sh 0.2.0
 
 set -euo pipefail
 
 VERSION="${1:?Usage: $0 <version>}"
+NOTES_FILE="${2:-}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DMG_PATH="$REPO_ROOT/dist/FloatRec.dmg"
 SIGN_TOOL="$HOME/.floatrec-sparkle/sign_update"
@@ -107,20 +108,29 @@ echo "[4/4] GitHub Release 생성 중..."
 git tag -f "v${VERSION}" HEAD
 git push --force origin "refs/tags/v${VERSION}"
 
-gh release delete "v${VERSION}" --yes 2>/dev/null || true
-gh release create "v${VERSION}" "$DMG_PATH" \
-    --title "FloatRec v${VERSION}" \
-    --notes "$(cat <<NOTES
-## FloatRec v${VERSION}
+# 릴리즈 노트 결정
+if [ -n "$NOTES_FILE" ] && [ -f "$NOTES_FILE" ]; then
+    RELEASE_NOTES=$(cat "$NOTES_FILE")
+elif [ -f "$REPO_ROOT/CHANGELOG.md" ]; then
+    # CHANGELOG.md에서 현재 버전 섹션 추출
+    RELEASE_NOTES=$(sed -n "/^## \[${VERSION}\]/,/^## \[/p" "$REPO_ROOT/CHANGELOG.md" | sed '$d')
+fi
+
+if [ -z "${RELEASE_NOTES:-}" ]; then
+    RELEASE_NOTES="## FloatRec v${VERSION}
 
 ### 설치
 1. \`FloatRec.dmg\` 다운로드
 2. FloatRec.app을 응용 프로그램 폴더로 드래그
 3. 첫 실행 시 화면 녹화 권한 허용
 
-> macOS 14.0 이상, 라이브 녹화는 macOS 15+ 필요
-NOTES
-)"
+> macOS 14.0 이상, 라이브 녹화는 macOS 15+ 필요"
+fi
+
+gh release delete "v${VERSION}" --yes 2>/dev/null || true
+gh release create "v${VERSION}" "$DMG_PATH" \
+    --title "FloatRec v${VERSION}" \
+    --notes "$RELEASE_NOTES"
 
 echo ""
 echo "=== 배포 완료 ==="

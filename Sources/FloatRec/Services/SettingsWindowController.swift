@@ -8,7 +8,10 @@ final class SettingsWindowController {
     func show(using model: AppModel) {
         let window = window ?? makeWindow()
         window.contentView = NSHostingView(
-            rootView: SettingsView()
+            rootView: SettingsView(onCheckForUpdates: {
+                guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
+                appDelegate.updaterController?.checkForUpdates(nil)
+            })
                 .environmentObject(model)
                 .frame(width: 360, height: 320)
         )

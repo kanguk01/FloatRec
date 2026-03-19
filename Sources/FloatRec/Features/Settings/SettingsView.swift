@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var appModel: AppModel
+    var onCheckForUpdates: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -57,12 +58,18 @@ struct SettingsView: View {
 
             Spacer()
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("다음 단계")
-                    .font(.headline)
-                Text("수동 카메라 키 흐름을 더 자연스럽게 다듬는 작업이 다음 단계입니다.")
-                    .font(.subheadline)
+            Divider()
+
+            HStack {
+                Text("FloatRec v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
+                Spacer()
+                Button("업데이트 확인") {
+                    NSApp.activate(ignoringOtherApps: true)
+                    onCheckForUpdates?()
+                }
+                .buttonStyle(.bordered)
             }
         }
         .padding(20)
