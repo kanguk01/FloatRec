@@ -5,16 +5,16 @@
     <link>https://kanguk01.github.io/FloatRec/appcast.xml</link>
     <language>ko</language>
     <item>
-      <title>FloatRec v0.3.0</title>
-      <pubDate>목, 19  3월 2026 04:29:58 +0000</pubDate>
-      <sparkle:version>0.3.0</sparkle:version>
-      <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
+      <title>FloatRec v0.5.0</title>
+      <pubDate>목, 19  3월 2026 05:33:18 +0000</pubDate>
+      <sparkle:version>0.5.0</sparkle:version>
+      <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure
-        url="https://github.com/kanguk01/FloatRec/releases/download/v0.3.0/FloatRec.dmg"
+        url="https://github.com/kanguk01/FloatRec/releases/download/v0.5.0/FloatRec.dmg"
         type="application/octet-stream"
-        sparkle:edSignature="7Uga3y/e7D0PEHXk2rM/DIST3PQJaU9k8Aq2hnywTvgquBFwMgGWhNuxGH4TKnr6TB8AcPMzRd4eWgxlXjOwCw=="
-        length="1892487"
+        sparkle:edSignature="jD22MO/0+plVxiyhKZ65eLOairYD1ZvvJQT/XAU4BKPOInXC0OHbIyYNY1t8C8ouBEzH0wnSBzipiUwm8RD2Ag=="
+        length="1913005"
       />
     </item>
   </channel>
