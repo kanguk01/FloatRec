@@ -95,6 +95,37 @@ struct MenuBarContentView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
+            VStack(alignment: .leading, spacing: 6) {
+                Text("자동 저장")
+                    .font(.subheadline.weight(.semibold))
+
+                if let path = appModel.featureFlags.autoSavePath {
+                    HStack(spacing: 6) {
+                        Image(systemName: "folder.fill")
+                            .foregroundStyle(.secondary)
+                        Text(FileManager.default.displayName(atPath: path))
+                            .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        Button("해제") {
+                            appModel.clearAutoSaveFolder()
+                        }
+                        .font(.caption)
+                    }
+                    .padding(8)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                } else {
+                    Button {
+                        appModel.chooseAutoSaveFolder()
+                    } label: {
+                        Label("저장 폴더 설정", systemImage: "folder.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .controlSize(.small)
+                }
+            }
+
             if let installMessage = appModel.installRecommendationMessage {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(installMessage)

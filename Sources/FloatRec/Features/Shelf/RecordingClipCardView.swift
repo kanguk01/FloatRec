@@ -48,6 +48,9 @@ struct RecordingClipCardView: View {
                     actionButton("Finder", icon: "folder") {
                         appModel.revealClipInFinder(clip)
                     }
+                    actionButton("GIF", icon: "photo.on.rectangle") {
+                        appModel.exportClipAsGIF(clip)
+                    }
 
                     Spacer()
 
@@ -85,6 +88,7 @@ struct RecordingClipCardView: View {
                     Button("저장") { appModel.saveClip(clip) }
                     Button("Finder에서 보기") { appModel.revealClipInFinder(clip) }
                     Button("복사") { appModel.copyClipToPasteboard(clip) }
+                    Button("GIF로 내보내기") { appModel.exportClipAsGIF(clip) }
                     Divider()
                     Button("닫기") { appModel.removeClip(clip) }
                 }

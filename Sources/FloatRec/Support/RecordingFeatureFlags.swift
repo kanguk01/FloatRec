@@ -5,6 +5,7 @@ struct RecordingFeatureFlags {
     private static let clickHighlightKey = "featureFlags.isClickHighlightEnabled"
     private static let cameraStyleKey = "featureFlags.cameraControlStyle"
     private static let spotlightKey = "featureFlags.defaultManualSpotlightEnabled"
+    private static let autoSavePathKey = "featureFlags.autoSavePath"
 
     var isAutoZoomEnabled: Bool {
         didSet { UserDefaults.standard.set(isAutoZoomEnabled, forKey: Self.autoZoomKey) }
@@ -20,6 +21,16 @@ struct RecordingFeatureFlags {
 
     var defaultManualSpotlightEnabled: Bool {
         didSet { UserDefaults.standard.set(defaultManualSpotlightEnabled, forKey: Self.spotlightKey) }
+    }
+
+    var autoSavePath: String? {
+        didSet {
+            if let autoSavePath {
+                UserDefaults.standard.set(autoSavePath, forKey: Self.autoSavePathKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.autoSavePathKey)
+            }
+        }
     }
 
     static let synchronousPostProcessingDuration: TimeInterval = 5
@@ -52,5 +63,7 @@ struct RecordingFeatureFlags {
         } else {
             defaultManualSpotlightEnabled = true
         }
+
+        autoSavePath = defaults.string(forKey: Self.autoSavePathKey)
     }
 }
