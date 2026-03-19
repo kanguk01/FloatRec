@@ -70,6 +70,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+install_name_tool -add_rpath @executable_path/../Frameworks "$MACOS_DIR/$APP_NAME" 2>/dev/null || true
+
 FLOATREC_SIGNING_IDENTITY="$SIGNING_IDENTITY" \
 FLOATREC_SIGNING_KEYCHAIN_PATH="$SIGNING_KEYCHAIN_PATH" \
   "$REPO_ROOT/scripts/ensure_local_signing_identity.sh" >/dev/null
