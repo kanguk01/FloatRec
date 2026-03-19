@@ -161,6 +161,19 @@ Sources/FloatRec/
 
 </details>
 
+<details>
+<summary><h2>Support</h2></summary>
+
+FloatRec이 유용하셨다면 커피 한 잔 사주세요 :)
+
+<div align="center">
+<img src="assets/donate-qr.png" width="200" alt="Donate">
+<br>
+<sub>Toss로 후원하기</sub>
+</div>
+
+</details>
+
 ## License
 
 Private — All rights reserved.
