@@ -17,22 +17,34 @@ struct MenuBarContentView: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text(appModel.hotKeyDisplayString)
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.thinMaterial, in: Capsule())
-
-                    if appModel.recordingState.isRecording || appModel.recordingState.isPaused {
-                        Text(appModel.stopHotKeyDisplayString)
-                            .font(.system(.caption2, design: .rounded, weight: .medium))
+                    HStack(spacing: 4) {
+                        Text("녹화")
+                            .font(.system(.caption2, design: .rounded))
                             .foregroundStyle(.secondary)
+                        Text(appModel.hotKeyDisplayString)
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
                     }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.thinMaterial, in: Capsule())
 
                     if appModel.recordingState.isRecording || appModel.recordingState.isPaused {
-                        Text(appModel.pauseHotKeyDisplayString)
-                            .font(.system(.caption2, design: .rounded, weight: .medium))
-                            .foregroundStyle(.orange)
+                        HStack(spacing: 4) {
+                            Text("종료")
+                                .font(.system(.caption2, design: .rounded))
+                                .foregroundStyle(.secondary)
+                            Text(appModel.stopHotKeyDisplayString)
+                                .font(.system(.caption2, design: .rounded, weight: .medium))
+                        }
+
+                        HStack(spacing: 4) {
+                            Text(appModel.recordingState.isPaused ? "재개" : "일시정지")
+                                .font(.system(.caption2, design: .rounded))
+                                .foregroundStyle(.orange)
+                            Text(appModel.pauseHotKeyDisplayString)
+                                .font(.system(.caption2, design: .rounded, weight: .medium))
+                                .foregroundStyle(.orange)
+                        }
                     }
                 }
             }
@@ -64,6 +76,33 @@ struct MenuBarContentView: View {
                     .toggleStyle(.switch)
                     .disabled(appModel.recordingState.isRecording || appModel.recordingState.isPaused || appModel.recordingState.isBusy)
                 }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("오디오")
+                    .font(.subheadline.weight(.semibold))
+
+                Toggle(isOn: $appModel.featureFlags.isSystemAudioEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("시스템 사운드")
+                        Text("앱에서 재생되는 소리를 녹화합니다.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .disabled(appModel.recordingState.isRecording || appModel.recordingState.isBusy)
+
+                Toggle(isOn: $appModel.featureFlags.isMicrophoneEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("마이크")
+                        Text("마이크 입력을 함께 녹화합니다.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .disabled(appModel.recordingState.isRecording || appModel.recordingState.isBusy)
             }
 
             HStack {

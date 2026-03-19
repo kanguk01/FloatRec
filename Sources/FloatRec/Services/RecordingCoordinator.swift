@@ -15,6 +15,8 @@ final class RecordingCoordinator {
     private var isClickHighlightEnabled = true
     private var defaultManualSpotlightEnabled = true
     private var cameraControlStyle: CameraControlStyle = .manualHotkeys
+    private var isSystemAudioEnabled = false
+    private var isMicrophoneEnabled = false
 
     init(
         sourceCatalog: ScreenCaptureSourceCatalog,
@@ -46,12 +48,16 @@ final class RecordingCoordinator {
         isClickHighlightEnabled: Bool,
         defaultManualSpotlightEnabled: Bool,
         cameraControlStyle: CameraControlStyle,
+        isSystemAudioEnabled: Bool,
+        isMicrophoneEnabled: Bool,
         fallbackSourceLabel: String
     ) async throws {
         self.isAutoZoomEnabled = isAutoZoomEnabled
         self.isClickHighlightEnabled = isClickHighlightEnabled
         self.defaultManualSpotlightEnabled = defaultManualSpotlightEnabled
         self.cameraControlStyle = cameraControlStyle
+        self.isSystemAudioEnabled = isSystemAudioEnabled
+        self.isMicrophoneEnabled = isMicrophoneEnabled
         segments.removeAll()
         if #available(macOS 15.0, *) {
             let resolvedSource: ResolvedCaptureSource?
@@ -83,7 +89,9 @@ final class RecordingCoordinator {
                     let useCustomClickHighlight = isClickHighlightEnabled && resolvedSource.autoZoomTrackingRect != nil
                     try await recorder.start(
                         source: resolvedSource,
-                        showBuiltInClickHighlight: !useCustomClickHighlight
+                        showBuiltInClickHighlight: !useCustomClickHighlight,
+                        isSystemAudioEnabled: isSystemAudioEnabled,
+                        isMicrophoneEnabled: isMicrophoneEnabled
                     )
                     cursorTrackingService.startTracking(
                         for: resolvedSource,
@@ -113,33 +121,47 @@ final class RecordingCoordinator {
            let recorder = liveRecorder as? ScreenCaptureRecorder {
             let cursorTrack = cursorTrackingService.stopTracking()
             do {
-                let artifact = try await recorder.stopRecording()
+                var finalURL: URL
+                var finalDuration: TimeInterval
+                var sourceLabel = "녹화"
 
-                var finalURL = artifact.fileURL
-                var finalDuration = artifact.duration
+                if recorder.hasActiveRecordingOutput {
+                    let artifact = try await recorder.stopRecording()
+                    finalURL = artifact.fileURL
+                    finalDuration = artifact.duration
+                    sourceLabel = artifact.sourceLabel
 
-                if !segments.isEmpty {
-                    segments.append(artifact.fileURL)
-                    let mergedURL = try await mergeSegments(segments)
-                    finalURL = mergedURL
-                    finalDuration = segments.reduce(0) { sum, _ in sum } // will be re-resolved below
-                    let mergedAsset = AVURLAsset(url: mergedURL)
-                    let mergedDuration = try await mergedAsset.load(.duration).seconds
-                    if mergedDuration.isFinite, mergedDuration > 0 {
-                        finalDuration = mergedDuration
-                    } else {
-                        finalDuration = artifact.duration
+                    if !segments.isEmpty {
+                        segments.append(artifact.fileURL)
                     }
-                    segments.removeAll()
+                } else if !segments.isEmpty {
+                    finalURL = segments.first!
+                    finalDuration = 0
+                } else {
+                    throw RecordingServiceError.notRecording
                 }
 
+                if segments.count > 1 {
+                    let mergedURL = try await mergeSegments(segments)
+                    finalURL = mergedURL
+                    let mergedAsset = AVURLAsset(url: mergedURL)
+                    let mergedDuration = try await mergedAsset.load(.duration).seconds
+                    finalDuration = (mergedDuration.isFinite && mergedDuration > 0) ? mergedDuration : finalDuration
+                } else if segments.count == 1 {
+                    finalURL = segments[0]
+                    let asset = AVURLAsset(url: finalURL)
+                    let dur = try await asset.load(.duration).seconds
+                    if dur.isFinite, dur > 0 { finalDuration = dur }
+                }
+                segments.removeAll()
+
                 logger.info(
-                    "stop recording produced artifact: duration=\(finalDuration, privacy: .public)s segments=\(self.segments.count, privacy: .public) cursorTrack=\(cursorTrack != nil, privacy: .public) sampleCount=\(cursorTrack?.samples.count ?? 0, privacy: .public) clickCount=\(cursorTrack?.clickSamples.count ?? 0, privacy: .public)"
+                    "stop recording produced artifact: duration=\(finalDuration, privacy: .public)s cursorTrack=\(cursorTrack != nil, privacy: .public)"
                 )
                 return RecordingArtifact(
                     fileURL: finalURL,
                     duration: finalDuration,
-                    sourceLabel: artifact.sourceLabel,
+                    sourceLabel: sourceLabel,
                     cursorTrack: cursorTrack
                 )
             } catch {

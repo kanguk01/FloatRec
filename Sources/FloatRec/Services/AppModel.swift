@@ -36,6 +36,7 @@ final class AppModel: ObservableObject {
     private let areaSelectionOverlayController = AreaSelectionOverlayController()
     private let captureSelectionOverlayController = CaptureSelectionOverlayController()
     private let displayHighlightController = DisplayHighlightController()
+    private var recordingStatusHUD: RecordingStatusHUDController { RecordingStatusHUDController.shared }
     private var activeHotKeyTask: Task<Void, Never>?
     private var processingTimeoutTask: Task<Void, Never>?
     private var postProcessingTasks: [UUID: Task<Void, Never>] = [:]
@@ -321,19 +322,12 @@ final class AppModel: ObservableObject {
                 isClickHighlightEnabled: featureFlags.isClickHighlightEnabled,
                 defaultManualSpotlightEnabled: featureFlags.defaultManualSpotlightEnabled,
                 cameraControlStyle: featureFlags.cameraControlStyle,
+                isSystemAudioEnabled: featureFlags.isSystemAudioEnabled,
+                isMicrophoneEnabled: featureFlags.isMicrophoneEnabled,
                 fallbackSourceLabel: currentSourceLabel
             )
             recordingState = .recording(startedAt: .now)
-            recordingTimer?.cancel()
-            recordingTimer = Task { [weak self] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(1))
-                    guard let self, self.recordingState.isRecording else { break }
-                    if case .recording(let startedAt) = self.recordingState {
-                        self.recordingElapsedTime = Date().timeIntervalSince(startedAt)
-                    }
-                }
-            }
+            startElapsedTimer()
             logger.info("recording started successfully")
         } catch {
             recordingState = .idle
@@ -348,6 +342,7 @@ final class AppModel: ObservableObject {
         recordingTimer?.cancel()
         recordingTimer = nil
         recordingElapsedTime = 0
+        recordingStatusHUD.hide()
 
         areaSelectionOverlayController.cancelSelection()
         recordingState = .processing
@@ -391,6 +386,7 @@ final class AppModel: ObservableObject {
                 recordingState = .paused(startedAt: startedAt, pausedAt: .now)
                 recordingTimer?.cancel()
                 recordingTimer = nil
+                recordingStatusHUD.update(elapsed: formattedElapsedTime, isPaused: true)
                 logger.info("recording paused")
             } catch {
                 lastErrorMessage = error.localizedDescription
@@ -405,16 +401,7 @@ final class AppModel: ObservableObject {
                 guard let resolvedSource = selectedResolvedSource else { return }
                 try await recordingCoordinator.resumeRecording(resolvedSource: resolvedSource)
                 recordingState = .recording(startedAt: startedAt)
-                recordingTimer?.cancel()
-                recordingTimer = Task { [weak self] in
-                    while !Task.isCancelled {
-                        try? await Task.sleep(for: .seconds(1))
-                        guard let self, self.recordingState.isRecording else { break }
-                        if case .recording(let startedAt) = self.recordingState {
-                            self.recordingElapsedTime = Date().timeIntervalSince(startedAt)
-                        }
-                    }
-                }
+                startElapsedTimer()
                 logger.info("recording resumed")
             } catch {
                 lastErrorMessage = error.localizedDescription
@@ -657,8 +644,24 @@ final class AppModel: ObservableObject {
         recordingTimer?.cancel()
         recordingTimer = nil
         recordingElapsedTime = 0
+        recordingStatusHUD.hide()
         recordingState = .idle
         lastErrorMessage = nil
+    }
+
+    private func startElapsedTimer() {
+        recordingTimer?.cancel()
+        recordingTimer = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, self.recordingState.isRecording else { break }
+                if case .recording(let startedAt) = self.recordingState {
+                    self.recordingElapsedTime = Date().timeIntervalSince(startedAt)
+                    self.recordingStatusHUD.update(elapsed: self.formattedElapsedTime, isPaused: false)
+                }
+            }
+        }
+        recordingStatusHUD.update(elapsed: formattedElapsedTime, isPaused: false)
     }
 
     private func syncSelectedSource() {

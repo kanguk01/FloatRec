@@ -23,6 +23,8 @@ final class ScreenCaptureRecorder: NSObject {
     private var outputURL: URL?
     private var sourceLabel: String?
 
+    var hasActiveRecordingOutput: Bool { recordingOutput != nil }
+
     private var recordingDidStartContinuation: CheckedContinuation<Void, Error>?
     private var recordingDidFinishContinuation: CheckedContinuation<Void, Error>?
     private var pendingRecordingDidFinishResult: Result<Void, Error>?
@@ -51,7 +53,12 @@ final class ScreenCaptureRecorder: NSObject {
         pendingRecordingDidFinishResult = nil
     }
 
-    func start(source: ResolvedCaptureSource, showBuiltInClickHighlight: Bool) async throws {
+    func start(
+        source: ResolvedCaptureSource,
+        showBuiltInClickHighlight: Bool,
+        isSystemAudioEnabled: Bool = false,
+        isMicrophoneEnabled: Bool = false
+    ) async throws {
         let filter = source.makeFilter()
         let configuration = SCStreamConfiguration()
         let captureProfile = capturePerformanceProfile(
@@ -68,6 +75,14 @@ final class ScreenCaptureRecorder: NSObject {
         configuration.pixelFormat = captureProfile.pixelFormat
         configuration.captureResolution = captureProfile.captureResolution
         configuration.scalesToFit = true
+        configuration.capturesAudio = isSystemAudioEnabled
+        configuration.excludesCurrentProcessAudio = true
+        if #available(macOS 15.4, *) {
+            if isMicrophoneEnabled {
+                configuration.captureMicrophone = true
+                configuration.microphoneCaptureDeviceID = AVCaptureDevice.default(for: .audio)?.uniqueID
+            }
+        }
         configuration.showMouseClicks = showBuiltInClickHighlight
         if let sourceRect = source.sourceRect {
             configuration.sourceRect = sourceRect

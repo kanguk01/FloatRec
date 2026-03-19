@@ -6,6 +6,8 @@ struct RecordingFeatureFlags {
     private static let cameraStyleKey = "featureFlags.cameraControlStyle"
     private static let spotlightKey = "featureFlags.defaultManualSpotlightEnabled"
     private static let autoSavePathKey = "featureFlags.autoSavePath"
+    private static let systemAudioKey = "featureFlags.isSystemAudioEnabled"
+    private static let microphoneKey = "featureFlags.isMicrophoneEnabled"
 
     var isAutoZoomEnabled: Bool {
         didSet { UserDefaults.standard.set(isAutoZoomEnabled, forKey: Self.autoZoomKey) }
@@ -21,6 +23,14 @@ struct RecordingFeatureFlags {
 
     var defaultManualSpotlightEnabled: Bool {
         didSet { UserDefaults.standard.set(defaultManualSpotlightEnabled, forKey: Self.spotlightKey) }
+    }
+
+    var isSystemAudioEnabled: Bool {
+        didSet { UserDefaults.standard.set(isSystemAudioEnabled, forKey: Self.systemAudioKey) }
+    }
+
+    var isMicrophoneEnabled: Bool {
+        didSet { UserDefaults.standard.set(isMicrophoneEnabled, forKey: Self.microphoneKey) }
     }
 
     var autoSavePath: String? {
@@ -62,6 +72,18 @@ struct RecordingFeatureFlags {
             defaultManualSpotlightEnabled = defaults.bool(forKey: Self.spotlightKey)
         } else {
             defaultManualSpotlightEnabled = true
+        }
+
+        if defaults.object(forKey: Self.systemAudioKey) != nil {
+            isSystemAudioEnabled = defaults.bool(forKey: Self.systemAudioKey)
+        } else {
+            isSystemAudioEnabled = false
+        }
+
+        if defaults.object(forKey: Self.microphoneKey) != nil {
+            isMicrophoneEnabled = defaults.bool(forKey: Self.microphoneKey)
+        } else {
+            isMicrophoneEnabled = false
         }
 
         autoSavePath = defaults.string(forKey: Self.autoSavePathKey)
