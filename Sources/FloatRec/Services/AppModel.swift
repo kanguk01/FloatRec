@@ -20,10 +20,13 @@ final class AppModel: ObservableObject {
     @Published var lastErrorMessage: String?
     @Published private(set) var lastAreaSelectionDescription: String?
     @Published var featureFlags = RecordingFeatureFlags()
+
     @Published private(set) var recordingElapsedTime: TimeInterval = 0
+    private var recordingTimer: Task<Void, Never>?
 
     let hotKeyDisplayString = GlobalHotKeyAction.toggleRecording.displayString
     let stopHotKeyDisplayString = GlobalHotKeyAction.stopRecording.displayString
+    let pauseHotKeyDisplayString = GlobalHotKeyAction.togglePause.displayString
 
     private let permissionService: ScreenRecordingPermissionService
     private let sourceCatalog: ScreenCaptureSourceCatalog
@@ -33,7 +36,6 @@ final class AppModel: ObservableObject {
     private let areaSelectionOverlayController = AreaSelectionOverlayController()
     private let captureSelectionOverlayController = CaptureSelectionOverlayController()
     private let displayHighlightController = DisplayHighlightController()
-    private var recordingTimer: Timer?
     private var activeHotKeyTask: Task<Void, Never>?
     private var processingTimeoutTask: Task<Void, Never>?
     private var postProcessingTasks: [UUID: Task<Void, Never>] = [:]
@@ -74,15 +76,16 @@ final class AppModel: ObservableObject {
         recordingCoordinator.teardownOnTermination()
     }
 
-    var statusItemSymbolName: String {
-        recordingState.isRecording ? "record.circle.fill" : "circle.dashed"
+    var formattedElapsedTime: String {
+        let minutes = Int(recordingElapsedTime) / 60
+        let seconds = Int(recordingElapsedTime) % 60
+        return "\(minutes):\(String(format: "%02d", seconds))"
     }
 
-    var formattedElapsedTime: String {
-        let totalSeconds = Int(recordingElapsedTime)
-        let minutes = totalSeconds / 60
-        let seconds = totalSeconds % 60
-        return String(format: "%d:%02d", minutes, seconds)
+    var statusItemSymbolName: String {
+        if recordingState.isRecording { return "record.circle.fill" }
+        if recordingState.isPaused { return "pause.circle.fill" }
+        return "circle.dashed"
     }
 
     var latestClip: RecordingClip? {
@@ -140,6 +143,8 @@ final class AppModel: ObservableObject {
             await startRecording()
         case .recording:
             await stopRecording()
+        case .paused:
+            await resumeRecording()
         case .requestingPermission, .processing:
             break
         }
@@ -157,6 +162,8 @@ final class AppModel: ObservableObject {
                 await startRecording()
             case .recording:
                 await stopRecording()
+            case .paused:
+                await resumeRecording()
             case .requestingPermission:
                 cancelPendingCapturePreparation()
             case .processing:
@@ -164,7 +171,7 @@ final class AppModel: ObservableObject {
             }
         case .stopRecording:
             switch recordingState {
-            case .recording:
+            case .recording, .paused:
                 await stopRecording()
             case .requestingPermission:
                 cancelPendingCapturePreparation()
@@ -172,6 +179,15 @@ final class AppModel: ObservableObject {
                 forceResetFromProcessing()
             case .idle:
                 return
+            }
+        case .togglePause:
+            switch recordingState {
+            case .recording:
+                await pauseRecording()
+            case .paused:
+                await resumeRecording()
+            default:
+                break
             }
         }
     }
@@ -308,7 +324,16 @@ final class AppModel: ObservableObject {
                 fallbackSourceLabel: currentSourceLabel
             )
             recordingState = .recording(startedAt: .now)
-            startRecordingTimer()
+            recordingTimer?.cancel()
+            recordingTimer = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard let self, self.recordingState.isRecording else { break }
+                    if case .recording(let startedAt) = self.recordingState {
+                        self.recordingElapsedTime = Date().timeIntervalSince(startedAt)
+                    }
+                }
+            }
             logger.info("recording started successfully")
         } catch {
             recordingState = .idle
@@ -318,9 +343,12 @@ final class AppModel: ObservableObject {
     }
 
     func stopRecording() async {
-        guard recordingState.isRecording else { return }
+        guard recordingState.isRecording || recordingState.isPaused else { return }
 
-        stopRecordingTimer()
+        recordingTimer?.cancel()
+        recordingTimer = nil
+        recordingElapsedTime = 0
+
         areaSelectionOverlayController.cancelSelection()
         recordingState = .processing
         scheduleProcessingTimeout()
@@ -345,10 +373,6 @@ final class AppModel: ObservableObject {
             processingTimeoutTask?.cancel()
             showShelf()
 
-            if !shouldProcess {
-                autoSaveClip(clip)
-            }
-
             if shouldProcess {
                 enqueuePostProcessing(for: clip, artifact: artifact)
             }
@@ -356,6 +380,45 @@ final class AppModel: ObservableObject {
             recordingState = .idle
             processingTimeoutTask?.cancel()
             lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func pauseRecording() async {
+        guard recordingState.isRecording else { return }
+        if case .recording(let startedAt) = recordingState {
+            do {
+                try await recordingCoordinator.pauseRecording()
+                recordingState = .paused(startedAt: startedAt, pausedAt: .now)
+                recordingTimer?.cancel()
+                recordingTimer = nil
+                logger.info("recording paused")
+            } catch {
+                lastErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func resumeRecording() async {
+        guard recordingState.isPaused else { return }
+        if case .paused(let startedAt, _) = recordingState {
+            do {
+                guard let resolvedSource = selectedResolvedSource else { return }
+                try await recordingCoordinator.resumeRecording(resolvedSource: resolvedSource)
+                recordingState = .recording(startedAt: startedAt)
+                recordingTimer?.cancel()
+                recordingTimer = Task { [weak self] in
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(1))
+                        guard let self, self.recordingState.isRecording else { break }
+                        if case .recording(let startedAt) = self.recordingState {
+                            self.recordingElapsedTime = Date().timeIntervalSince(startedAt)
+                        }
+                    }
+                }
+                logger.info("recording resumed")
+            } catch {
+                lastErrorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -507,50 +570,6 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func autoSaveClip(_ clip: RecordingClip) {
-        guard let folderPath = featureFlags.autoSavePath else { return }
-
-        let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
-        guard FileManager.default.fileExists(atPath: folderURL.path) else {
-            logger.error("auto-save folder does not exist: \(folderPath, privacy: .public)")
-            lastErrorMessage = "자동 저장 폴더가 존재하지 않습니다: \(folderPath)"
-            return
-        }
-
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
-        let timestamp = formatter.string(from: clip.createdAt)
-        let fileName = "FloatRec_\(timestamp).mp4"
-        let destinationURL = folderURL.appendingPathComponent(fileName)
-
-        do {
-            if FileManager.default.fileExists(atPath: destinationURL.path) {
-                try FileManager.default.removeItem(at: destinationURL)
-            }
-            try FileManager.default.copyItem(at: clip.fileURL, to: destinationURL)
-            logger.info("auto-saved clip to \(destinationURL.path, privacy: .public)")
-        } catch {
-            logger.error("auto-save failed: \(error.localizedDescription, privacy: .public)")
-            lastErrorMessage = "자동 저장에 실패했습니다: \(error.localizedDescription)"
-        }
-    }
-
-    func chooseAutoSaveFolder() {
-        let panel = NSOpenPanel()
-        panel.title = "자동 저장 폴더 선택"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        featureFlags.autoSavePath = url.path
-    }
-
-    func clearAutoSaveFolder() {
-        featureFlags.autoSavePath = nil
-    }
-
     func openScreenRecordingSettings() {
         permissionService.openSettings()
     }
@@ -602,23 +621,6 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func startRecordingTimer() {
-        recordingElapsedTime = 0
-        recordingTimer?.invalidate()
-        recordingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, case .recording(let startedAt) = self.recordingState else { return }
-                self.recordingElapsedTime = Date.now.timeIntervalSince(startedAt)
-            }
-        }
-    }
-
-    private func stopRecordingTimer() {
-        recordingTimer?.invalidate()
-        recordingTimer = nil
-        recordingElapsedTime = 0
-    }
-
     private func hasOperationalScreenAccess() async -> Bool {
         if permissionService.canAccess() {
             return true
@@ -652,6 +654,9 @@ final class AppModel: ObservableObject {
         logger.info("cancelling pending capture preparation")
         captureSelectionOverlayController.cancelSelection()
         areaSelectionOverlayController.cancelSelection()
+        recordingTimer?.cancel()
+        recordingTimer = nil
+        recordingElapsedTime = 0
         recordingState = .idle
         lastErrorMessage = nil
     }
@@ -767,7 +772,6 @@ final class AppModel: ObservableObject {
         }
 
         clips[index] = updatedClip
-        autoSaveClip(updatedClip)
         Task {
             await loadThumbnailIfNeeded(for: updatedClip)
         }

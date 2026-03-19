@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import OSLog
 
@@ -9,6 +10,7 @@ final class RecordingCoordinator {
     private let cursorTrackingService: CursorTrackingService
     private let autoZoomProcessor: AutoZoomProcessor
     private var liveRecorder: AnyObject?
+    private var segments: [URL] = []
     private var isAutoZoomEnabled = true
     private var isClickHighlightEnabled = true
     private var defaultManualSpotlightEnabled = true
@@ -50,6 +52,7 @@ final class RecordingCoordinator {
         self.isClickHighlightEnabled = isClickHighlightEnabled
         self.defaultManualSpotlightEnabled = defaultManualSpotlightEnabled
         self.cameraControlStyle = cameraControlStyle
+        segments.removeAll()
         if #available(macOS 15.0, *) {
             let resolvedSource: ResolvedCaptureSource?
 
@@ -108,22 +111,39 @@ final class RecordingCoordinator {
     func stopRecording() async throws -> RecordingArtifact {
         if #available(macOS 15.0, *),
            let recorder = liveRecorder as? ScreenCaptureRecorder {
-            // Keep liveRecorder alive so the underlying SCStream persists for reuse.
-            // Only nil it out on failure to avoid a poisoned recorder on the next start.
             let cursorTrack = cursorTrackingService.stopTracking()
             do {
                 let artifact = try await recorder.stopRecording()
+
+                var finalURL = artifact.fileURL
+                var finalDuration = artifact.duration
+
+                if !segments.isEmpty {
+                    segments.append(artifact.fileURL)
+                    let mergedURL = try await mergeSegments(segments)
+                    finalURL = mergedURL
+                    finalDuration = segments.reduce(0) { sum, _ in sum } // will be re-resolved below
+                    let mergedAsset = AVURLAsset(url: mergedURL)
+                    let mergedDuration = try await mergedAsset.load(.duration).seconds
+                    if mergedDuration.isFinite, mergedDuration > 0 {
+                        finalDuration = mergedDuration
+                    } else {
+                        finalDuration = artifact.duration
+                    }
+                    segments.removeAll()
+                }
+
                 logger.info(
-                    "stop recording produced artifact: duration=\(artifact.duration, privacy: .public)s cursorTrack=\(cursorTrack != nil, privacy: .public) sampleCount=\(cursorTrack?.samples.count ?? 0, privacy: .public) clickCount=\(cursorTrack?.clickSamples.count ?? 0, privacy: .public)"
+                    "stop recording produced artifact: duration=\(finalDuration, privacy: .public)s segments=\(self.segments.count, privacy: .public) cursorTrack=\(cursorTrack != nil, privacy: .public) sampleCount=\(cursorTrack?.samples.count ?? 0, privacy: .public) clickCount=\(cursorTrack?.clickSamples.count ?? 0, privacy: .public)"
                 )
                 return RecordingArtifact(
-                    fileURL: artifact.fileURL,
-                    duration: artifact.duration,
+                    fileURL: finalURL,
+                    duration: finalDuration,
                     sourceLabel: artifact.sourceLabel,
                     cursorTrack: cursorTrack
                 )
             } catch {
-                // The recorder is in a bad state; tear it down so next start creates a fresh one
+                segments.removeAll()
                 recorder.teardownImmediately()
                 self.liveRecorder = nil
                 throw error
@@ -131,6 +151,93 @@ final class RecordingCoordinator {
         }
 
         return try await demoRecordingService.stopRecording()
+    }
+
+    func pauseRecording() async throws {
+        if #available(macOS 15.0, *),
+           let recorder = liveRecorder as? ScreenCaptureRecorder {
+            let artifact = try await recorder.pauseRecording()
+            segments.append(artifact.fileURL)
+            _ = cursorTrackingService.stopTracking()
+            logger.info("recording paused, segment count=\(self.segments.count, privacy: .public)")
+        }
+    }
+
+    func resumeRecording(resolvedSource: ResolvedCaptureSource) async throws {
+        if #available(macOS 15.0, *),
+           let recorder = liveRecorder as? ScreenCaptureRecorder {
+            try await recorder.resumeRecording()
+            let needsTracking = isAutoZoomEnabled || isClickHighlightEnabled
+            cursorTrackingService.startTracking(
+                for: resolvedSource,
+                enabled: needsTracking,
+                cameraControlStyle: cameraControlStyle,
+                defaultManualSpotlightEnabled: defaultManualSpotlightEnabled
+            )
+            logger.info("recording resumed")
+        }
+    }
+
+    private func mergeSegments(_ urls: [URL]) async throws -> URL {
+        let composition = AVMutableComposition()
+        guard let videoTrack = composition.addMutableTrack(
+            withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else {
+            throw RecordingServiceError.writerSetupFailed
+        }
+
+        // Optional audio track
+        let audioTrack = composition.addMutableTrack(
+            withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid
+        )
+
+        var currentTime = CMTime.zero
+        for url in urls {
+            let asset = AVURLAsset(url: url)
+            let duration = try await asset.load(.duration)
+            if let sourceVideoTrack = try await asset.loadTracks(withMediaType: .video).first {
+                try videoTrack.insertTimeRange(
+                    CMTimeRange(start: .zero, duration: duration),
+                    of: sourceVideoTrack,
+                    at: currentTime
+                )
+            }
+            if let sourceAudioTrack = try await asset.loadTracks(withMediaType: .audio).first,
+               let audioTrack {
+                try? audioTrack.insertTimeRange(
+                    CMTimeRange(start: .zero, duration: duration),
+                    of: sourceAudioTrack,
+                    at: currentTime
+                )
+            }
+            currentTime = CMTimeAdd(currentTime, duration)
+        }
+
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FloatRecClips", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mp4")
+        try FileManager.default.createDirectory(
+            at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        guard let exporter = AVAssetExportSession(
+            asset: composition,
+            presetName: AVAssetExportPresetHighestQuality
+        ) else {
+            throw RecordingServiceError.writerSetupFailed
+        }
+        exporter.outputURL = outputURL
+        exporter.outputFileType = .mp4
+        await exporter.export()
+
+        if let error = exporter.error {
+            throw error
+        }
+
+        logger.info("merged \(urls.count, privacy: .public) segments into \(outputURL.lastPathComponent, privacy: .public)")
+        return outputURL
     }
 
     func shouldProcessSynchronously(_ artifact: RecordingArtifact) -> Bool {

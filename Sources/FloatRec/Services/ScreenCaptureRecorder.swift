@@ -167,6 +167,58 @@ final class ScreenCaptureRecorder: NSObject {
         )
     }
 
+    func pauseRecording() async throws -> RecordingArtifact {
+        guard let stream, let recordingOutput, let outputURL else {
+            throw RecordingServiceError.notRecording
+        }
+
+        let durationFallback = recordingOutput.recordedDuration.seconds
+
+        do {
+            try stream.removeRecordingOutput(recordingOutput)
+            try await waitForRecordingFinish()
+        } catch {
+            let leakedCont = recordingDidFinishContinuation
+            recordingDidFinishContinuation = nil
+            leakedCont?.resume(throwing: error)
+            pendingRecordingDidFinishResult = nil
+            logger.warning("pauseRecording removeOutput failed: \(error.localizedDescription, privacy: .public)")
+        }
+
+        self.recordingOutput = nil
+        let segmentURL = outputURL
+        self.outputURL = nil
+        self.pendingRecordingDidFinishResult = nil
+
+        let duration = await resolvedDuration(for: segmentURL, fallback: durationFallback)
+        return RecordingArtifact(
+            fileURL: segmentURL,
+            duration: duration,
+            sourceLabel: sourceLabel ?? "녹화",
+            cursorTrack: nil
+        )
+    }
+
+    func resumeRecording() async throws {
+        guard let stream else {
+            throw RecordingServiceError.notRecording
+        }
+
+        let newOutputURL = try makeOutputURL()
+        let config = SCRecordingOutputConfiguration()
+        config.outputURL = newOutputURL
+        config.outputFileType = .mp4
+        config.videoCodecType = .h264
+
+        let newOutput = SCRecordingOutput(configuration: config, delegate: self)
+        self.outputURL = newOutputURL
+        self.recordingOutput = newOutput
+        self.pendingRecordingDidFinishResult = nil
+
+        try stream.addRecordingOutput(newOutput)
+        try await waitForRecordingStart()
+    }
+
     private func startCaptureWithTimeout(_ stream: SCStream) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             recordingDidStartContinuation = continuation

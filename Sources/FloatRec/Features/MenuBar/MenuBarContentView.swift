@@ -23,10 +23,16 @@ struct MenuBarContentView: View {
                         .padding(.vertical, 4)
                         .background(.thinMaterial, in: Capsule())
 
-                    if appModel.recordingState.isRecording {
+                    if appModel.recordingState.isRecording || appModel.recordingState.isPaused {
                         Text(appModel.stopHotKeyDisplayString)
                             .font(.system(.caption2, design: .rounded, weight: .medium))
                             .foregroundStyle(.secondary)
+                    }
+
+                    if appModel.recordingState.isRecording || appModel.recordingState.isPaused {
+                        Text(appModel.pauseHotKeyDisplayString)
+                            .font(.system(.caption2, design: .rounded, weight: .medium))
+                            .foregroundStyle(.orange)
                     }
                 }
             }
@@ -44,7 +50,7 @@ struct MenuBarContentView: View {
                     }
                 }
                 .toggleStyle(.switch)
-                .disabled(appModel.recordingState.isRecording || appModel.recordingState.isBusy)
+                .disabled(appModel.recordingState.isRecording || appModel.recordingState.isPaused || appModel.recordingState.isBusy)
 
                 if appModel.featureFlags.isAutoZoomEnabled {
                     Toggle(isOn: $appModel.featureFlags.defaultManualSpotlightEnabled) {
@@ -56,7 +62,7 @@ struct MenuBarContentView: View {
                         }
                     }
                     .toggleStyle(.switch)
-                    .disabled(appModel.recordingState.isRecording || appModel.recordingState.isBusy)
+                    .disabled(appModel.recordingState.isRecording || appModel.recordingState.isPaused || appModel.recordingState.isBusy)
                 }
             }
 
@@ -95,37 +101,6 @@ struct MenuBarContentView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("자동 저장")
-                    .font(.subheadline.weight(.semibold))
-
-                if let path = appModel.featureFlags.autoSavePath {
-                    HStack(spacing: 6) {
-                        Image(systemName: "folder.fill")
-                            .foregroundStyle(.secondary)
-                        Text(FileManager.default.displayName(atPath: path))
-                            .font(.caption)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer()
-                        Button("해제") {
-                            appModel.clearAutoSaveFolder()
-                        }
-                        .font(.caption)
-                    }
-                    .padding(8)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                } else {
-                    Button {
-                        appModel.chooseAutoSaveFolder()
-                    } label: {
-                        Label("저장 폴더 설정", systemImage: "folder.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .controlSize(.small)
-                }
-            }
-
             if let installMessage = appModel.installRecommendationMessage {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(installMessage)
@@ -147,20 +122,46 @@ struct MenuBarContentView: View {
                 .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
             }
 
-            Button {
-                Task {
-                    await appModel.toggleRecording()
+            HStack(spacing: 8) {
+                Button {
+                    Task {
+                        await appModel.toggleRecording()
+                    }
+                } label: {
+                    Label(
+                        appModel.recordingState.primaryActionTitle,
+                        systemImage: appModel.recordingState.primaryActionSymbolName
+                    )
+                    .frame(maxWidth: .infinity)
                 }
-            } label: {
-                Label(
-                    appModel.recordingState.primaryActionTitle,
-                    systemImage: appModel.recordingState.primaryActionSymbolName
-                )
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.borderedProminent)
+                .tint(appModel.recordingState.isRecording ? .red : appModel.recordingState.isPaused ? .orange : .accentColor)
+                .disabled(appModel.recordingState.isBusy)
+
+                if appModel.recordingState.isRecording {
+                    Button {
+                        Task {
+                            await appModel.pauseRecording()
+                        }
+                    } label: {
+                        Label("일시정지", systemImage: "pause.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                }
+
+                if appModel.recordingState.isPaused {
+                    Button {
+                        Task {
+                            await appModel.stopRecording()
+                        }
+                    } label: {
+                        Label("종료", systemImage: "stop.circle.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(appModel.recordingState.isRecording ? .red : .accentColor)
-            .disabled(appModel.recordingState.isBusy)
 
             if appModel.recordingState.isBusy {
                 VStack(alignment: .leading, spacing: 6) {

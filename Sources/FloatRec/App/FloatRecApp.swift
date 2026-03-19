@@ -14,9 +14,11 @@ struct FloatRecApp: App {
                 }
         } label: {
             if appModel.recordingState.isRecording {
-                Label(appModel.formattedElapsedTime, systemImage: appModel.statusItemSymbolName)
+                Label(appModel.formattedElapsedTime, systemImage: "record.circle.fill")
+            } else if appModel.recordingState.isPaused {
+                Label("일시정지", systemImage: "pause.circle.fill")
             } else {
-                Label("FloatRec", systemImage: appModel.statusItemSymbolName)
+                Image(systemName: "circle.dashed")
             }
         }
         .menuBarExtraStyle(.window)

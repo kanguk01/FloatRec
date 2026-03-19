@@ -8,6 +8,7 @@ private let hotKeyLogger = Logger(subsystem: "dev.floatrec.app", category: "hotk
 enum GlobalHotKeyAction: UInt32, CaseIterable {
     case toggleRecording = 1
     case stopRecording = 2
+    case togglePause = 3
 
     var displayString: String {
         switch self {
@@ -15,6 +16,8 @@ enum GlobalHotKeyAction: UInt32, CaseIterable {
             "⌘⇧9"
         case .stopRecording:
             "⌘⇧0"
+        case .togglePause:
+            "⌘⇧P"
         }
     }
 
@@ -24,6 +27,8 @@ enum GlobalHotKeyAction: UInt32, CaseIterable {
             UInt32(kVK_ANSI_9)
         case .stopRecording:
             UInt32(kVK_ANSI_0)
+        case .togglePause:
+            UInt32(kVK_ANSI_P)
         }
     }
 
