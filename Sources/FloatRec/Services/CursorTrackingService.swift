@@ -8,7 +8,7 @@ final class CursorTrackingService {
 
     private let logger = Logger(subsystem: "dev.floatrec.app", category: "cursor-tracking")
     private let cameraHotKeyManager = RecordingCameraHotKeyManager()
-    private let cameraHUDController = RecordingCameraHUDController()
+    private var statusHUD: RecordingStatusHUDController { RecordingStatusHUDController.shared }
     private var trackingTask: Task<Void, Never>?
     private var globalMouseMonitor: Any?
     private var startedAt: TimeInterval?
@@ -64,7 +64,7 @@ final class CursorTrackingService {
         trackingTask = nil
         removeGlobalMouseMonitor()
         removeCameraHotKeys()
-        cameraHUDController.hide()
+        statusHUD.clearCameraStatus()
 
         defer {
             startedAt = nil
@@ -268,10 +268,9 @@ final class CursorTrackingService {
     }
 
     private func refreshCameraHUD() {
-        cameraHUDController.showStatus(
-            title: hudTitle(for: previewCameraState),
-            detail: hudDetail(for: previewCameraState)
-        )
+        let title = hudTitle(for: previewCameraState)
+        let detail = hudDetail(for: previewCameraState)
+        statusHUD.updateCameraStatus("\(title) · \(detail)")
     }
 
     private func hudTitle(for state: PreviewCameraState) -> String {
