@@ -14,7 +14,7 @@ Live Camera Control · Click Highlight · Instant Drag & Share
 
 <br>
 
-[<img src="https://img.shields.io/badge/Download-v0.2.0-28A745?style=for-the-badge&logo=apple&logoColor=white" alt="Download">](https://github.com/kanguk01/FloatRec/releases/latest)
+[<img src="https://img.shields.io/badge/Download-v0.5.0-28A745?style=for-the-badge&logo=apple&logoColor=white" alt="Download">](https://github.com/kanguk01/FloatRec/releases/latest)
 
 <br>
 
