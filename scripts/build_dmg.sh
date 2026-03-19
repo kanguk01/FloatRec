@@ -24,6 +24,8 @@ swift build -c release --package-path "$REPO_ROOT"
 cp "$EXECUTABLE_PATH" "$MACOS_DIR/$APP_NAME"
 chmod +x "$MACOS_DIR/$APP_NAME"
 
+cp "$REPO_ROOT/assets/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+
 FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
 mkdir -p "$FRAMEWORKS_DIR"
 SPARKLE_SRC="$REPO_ROOT/Frameworks/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
@@ -38,6 +40,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
   <string>FloatRec</string>
   <key>CFBundleExecutable</key>
   <string>FloatRec</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleIdentifier</key>
   <string>dev.floatrec.app</string>
   <key>CFBundleInfoDictionaryVersion</key>
