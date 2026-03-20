@@ -37,6 +37,15 @@ macOS 기본 녹화에는 없는 기능들:
 
 ## Install
 
+### Homebrew
+
+```bash
+brew tap kanguk01/floatrec
+brew install --cask floatrec
+```
+
+### Manual
+
 1. [최신 릴리즈](https://github.com/kanguk01/FloatRec/releases/latest)에서 `FloatRec.dmg` 다운로드
 2. FloatRec.app을 응용 프로그램 폴더로 드래그
 3. 첫 실행 시 화면 녹화 권한 허용
