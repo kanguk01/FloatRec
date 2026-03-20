@@ -132,7 +132,25 @@ gh release create "v${VERSION}" "$DMG_PATH" \
     --title "FloatRec v${VERSION}" \
     --notes "$RELEASE_NOTES"
 
+# 5. Homebrew Cask 갱신
+echo "[5/5] Homebrew Cask 갱신 중..."
+TAP_DIR="$(brew --repository kanguk01/floatrec 2>/dev/null || echo "")"
+if [ -n "$TAP_DIR" ] && [ -d "$TAP_DIR" ]; then
+    DMG_SHA256=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
+    sed -i '' "s/version \".*\"/version \"${VERSION}\"/" "$TAP_DIR/Casks/floatrec.rb"
+    sed -i '' "s/sha256 \".*\"/sha256 \"${DMG_SHA256}\"/" "$TAP_DIR/Casks/floatrec.rb"
+    cd "$TAP_DIR"
+    git add Casks/floatrec.rb
+    git commit -m "update floatrec to v${VERSION}"
+    git push origin main
+    cd "$REPO_ROOT"
+    echo "  Cask updated: v${VERSION} (${DMG_SHA256:0:12}...)"
+else
+    echo "  Homebrew tap이 없습니다. brew tap kanguk01/floatrec 후 다시 시도하세요."
+fi
+
 echo ""
 echo "=== 배포 완료 ==="
 echo "  Release: https://github.com/kanguk01/FloatRec/releases/tag/v${VERSION}"
 echo "  Appcast: https://kanguk01.github.io/FloatRec/appcast.xml"
+echo "  Homebrew: brew upgrade --cask floatrec"
