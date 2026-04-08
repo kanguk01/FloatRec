@@ -68,7 +68,7 @@ struct MenuBarContentView: View {
                     Toggle(isOn: $appModel.featureFlags.defaultManualSpotlightEnabled) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("기본 스포트라이트")
-                            Text("녹화 시작 시 켜두고, 녹화 중에는 ⌃4로 바로 켜고 끕니다.")
+                            Text("녹화 시작 시 켜두고, 녹화 중에는 ⌃⇧4로 바로 켜고 끕니다.")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -136,7 +136,7 @@ struct MenuBarContentView: View {
                 }
 
                 if appModel.featureFlags.isAutoZoomEnabled {
-                    Text("⌃4 스포트라이트")
+                    Text("⌃⇧4 스포트라이트")
                         .font(.caption2)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)

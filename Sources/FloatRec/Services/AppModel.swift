@@ -131,7 +131,7 @@ final class AppModel: ObservableObject {
     }
 
     var cameraControlSummary: String {
-        "녹화 중 ⌃1 반복 확대 · ⌃2 따라가기 · ⌃3 전체화면 · ⌃4 스포트라이트"
+        "녹화 중 ⌃⇧1 반복 확대 · ⌃⇧2 따라가기 · ⌃⇧3 전체화면 · ⌃⇧4 스포트라이트"
     }
 
     var shouldRecommendApplicationsInstall: Bool {

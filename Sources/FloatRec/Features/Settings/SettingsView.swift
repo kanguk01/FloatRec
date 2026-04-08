@@ -32,14 +32,14 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text("⌃1을 여러 번 눌러 1~4단계로 확대하고, 화면 상단 HUD로 현재 카메라 상태를 바로 알려줍니다.")
+            Text("⌃⇧1을 여러 번 눌러 1~4단계로 확대하고, 화면 상단 HUD로 현재 카메라 상태를 바로 알려줍니다.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
             Toggle(isOn: $appModel.featureFlags.defaultManualSpotlightEnabled) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("기본 스포트라이트")
-                    Text("녹화 시작 시 스포트라이트를 켠 상태로 시작합니다. 녹화 중에는 ⌃4로 바꿀 수 있습니다.")
+                    Text("녹화 시작 시 스포트라이트를 켠 상태로 시작합니다. 녹화 중에는 ⌃⇧4로 바꿀 수 있습니다.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

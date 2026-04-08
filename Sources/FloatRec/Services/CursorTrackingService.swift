@@ -332,7 +332,7 @@ final class CursorTrackingService {
     }
 
     private func hudDetail(for state: PreviewCameraState) -> String {
-        return "⌃1 확대 · ⌃2 따라가기 · ⌃3 전체 · ⌃4 스포트"
+        return "⌃⇧1 확대 · ⌃⇧2 따라가기 · ⌃⇧3 전체 · ⌃⇧4 스포트"
     }
 }
 
