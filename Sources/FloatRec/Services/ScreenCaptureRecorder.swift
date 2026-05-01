@@ -167,12 +167,12 @@ final class ScreenCaptureRecorder: NSObject {
             logger.warning("removeRecordingOutput or waitForRecordingFinish failed: \(error.localizedDescription, privacy: .public)")
         }
 
-        // 스트림은 절대 멈추지 않음 — output만 해제
         self.recordingOutput = nil
         self.outputURL = nil
         self.pendingRecordingDidFinishResult = nil
 
         let actualDuration = await resolvedDuration(for: outputURL, fallback: durationFallback)
+        await finishCaptureSession()
 
         return RecordingArtifact(
             fileURL: outputURL,
@@ -319,6 +319,24 @@ final class ScreenCaptureRecorder: NSObject {
             // Delegate signaled an error during finish; proceed with existing file
             logger.warning("recording finish signal received error: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    func finishCaptureSession() async {
+        guard let stream, isCapturing else {
+            self.stream = nil
+            self.isCapturing = false
+            return
+        }
+
+        do {
+            try await stream.stopCapture()
+            logger.info("stopped capture stream after final recording")
+        } catch {
+            logger.warning("failed to stop capture stream after final recording: \(error.localizedDescription, privacy: .public)")
+        }
+
+        self.stream = nil
+        self.isCapturing = false
     }
 
     // MARK: - Performance Profile

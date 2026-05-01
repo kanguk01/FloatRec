@@ -162,6 +162,8 @@ final class RecordingCoordinator {
                 logger.info(
                     "stop recording produced artifact: duration=\(finalDuration, privacy: .public)s cursorTrack=\(cursorTrack != nil, privacy: .public)"
                 )
+                await recorder.finishCaptureSession()
+                liveRecorder = nil
                 return RecordingArtifact(
                     fileURL: finalURL,
                     duration: finalDuration,
